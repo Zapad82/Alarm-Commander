@@ -21,12 +21,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -88,10 +90,10 @@ import com.example.data.MissionType
 import com.example.mission.StepSensorTracker
 import com.example.mission.VoiceSpeechHelper
 import com.example.mission.ZxingQrCodeAnalyzer
+import com.example.ui.LocalAppStrings
+import com.example.ui.localizedTitle
 import com.example.ui.theme.AlertCrimson
-import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.RadarEmerald
-import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.TacticalAmber
 import java.util.concurrent.Executors
 
@@ -117,6 +119,8 @@ fun ActiveAlarmScreen(
     onDismissSunrise: () -> Unit,
     onConfirmAntiReturnAwake: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+
     // Блокируем кнопку/свайп «Назад», пока звенит будильник или идёт миссия
     BackHandler(enabled = true) {
         // Намеренно заблокировано: выход возможен только через выполнение цепочки миссий
@@ -125,14 +129,15 @@ fun ActiveAlarmScreen(
     val escalation = uiState.escalation
     val alarm = uiState.alarm
 
+    val baseBg = MaterialTheme.colorScheme.background
     // Безопасная низкочастотная пульсация фона (период 1400 мс ≈ 0.7 Гц, без опасного стробоскопа)
     val infiniteTransition = rememberInfiniteTransition(label = "safe_escalation_pulse")
     val pulseColor by infiniteTransition.animateColor(
-        initialValue = ObsidianBg,
+        initialValue = baseBg,
         targetValue = if (escalation?.safeScreenPulseActive == true) {
             Color(0xFF3B0D11)
         } else {
-            ObsidianBg
+            baseBg
         },
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1400, easing = LinearEasing),
@@ -144,7 +149,7 @@ fun ActiveAlarmScreen(
     // 1. Режим контроля «Анти-возврат в кровать»
     if (uiState.isAntiReturnPromptActive) {
         AntiReturnVerificationView(
-            alarmLabel = alarm?.label ?: "Контроль пробуждения",
+            alarmLabel = alarm?.label ?: if (s.isEnglish) "Wake Verification" else "Контроль пробуждения",
             secondsRemaining = uiState.antiReturnSecondsRemaining,
             onConfirmAwake = onConfirmAntiReturnAwake
         )
@@ -154,7 +159,7 @@ fun ActiveAlarmScreen(
     // 2. Режим предварительного «Рассвета» (T−15 минут)
     if (escalation?.state == AlarmState.PRE_ALARM_SUNRISE) {
         SunrisePreAlarmView(
-            alarmLabel = alarm?.label ?: "Утренний рубеж",
+            alarmLabel = alarm?.label ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний рубеж",
             alarmTime = alarm?.formattedTime() ?: "07:00",
             webhookStatus = uiState.lastBackupEventMessage,
             onWakeUpEarly = onDismissSunrise
@@ -193,15 +198,16 @@ fun ActiveAlarmScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Warning,
-                        contentDescription = "Боевая тревога",
+                        contentDescription = s.activeCombatBanner,
                         tint = AlertCrimson,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "БОЕВАЯ ТРЕВОГА • АВТОПИЛОТ ЗАБЛОКИРОВАН",
+                        text = s.activeCombatBanner,
                         style = MaterialTheme.typography.labelLarge,
-                        color = AlertCrimson
+                        color = AlertCrimson,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -214,9 +220,10 @@ fun ActiveAlarmScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = alarm?.label ?: "Боевой подъём",
+                text = alarm?.label ?: if (s.isEnglish) "Combat Wake-Up" else "Боевой подъём",
                 style = MaterialTheme.typography.titleLarge,
-                color = TacticalAmber
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -224,7 +231,7 @@ fun ActiveAlarmScreen(
             // Карточка телеметрии эскалации
             if (escalation != null) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -235,14 +242,16 @@ fun ActiveAlarmScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "ПРОФИЛЬ: ${escalation.profile.name} • ЭТАП ${escalation.stage}/4",
+                                text = s.profileStageFormat(escalation.profile.name, escalation.stage),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = TacticalAmber
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.VolumeUp,
-                                    contentDescription = "Громкость",
+                                    contentDescription = "Volume",
                                     tint = if (escalation.missionAttenuated) RadarEmerald else AlertCrimson,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -277,9 +286,9 @@ fun ActiveAlarmScreen(
                         if (!uiState.lastBackupEventMessage.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Резервный канал: ${uiState.lastBackupEventMessage}",
+                                text = "${s.backupChannelPrefix} ${uiState.lastBackupEventMessage}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TacticalAmber
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -290,24 +299,31 @@ fun ActiveAlarmScreen(
 
             if (!isMissionOpened && !uiState.isPenaltySnoozeMode) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, TacticalAmber.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            RoundedCornerShape(16.dp)
+                        )
                 ) {
                     Column(
                         modifier = Modifier.padding(18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "ЦЕПОЧКА МИССИЙ РАЗБЛОКИРОВКИ (${uiState.totalMissionsInChain})",
+                            text = s.unlockMissionChainHeader(uiState.totalMissionsInChain),
                             style = MaterialTheme.typography.labelLarge,
-                            color = TacticalAmber
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = alarm?.missionChain?.joinToString("  →  ") { it.titleRu } ?: "Математика",
+                            text = alarm?.missionChain?.joinToString("  →  ") {
+                                it.localizedTitle(s.isEnglish)
+                            } ?: if (s.isEnglish) "Math" else "Математика",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
@@ -320,15 +336,17 @@ fun ActiveAlarmScreen(
                                 contentColor = Color.Black
                             ),
                             shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(58.dp)
+                                .heightIn(min = 56.dp)
                                 .testTag("start_mission_button")
                         ) {
                             Text(
-                                text = "ПРИСТУПИТЬ К МИССИИ ОТКЛЮЧЕНИЯ",
+                                text = s.startMissionBtn,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -339,17 +357,21 @@ fun ActiveAlarmScreen(
                 if (alarm?.allowSnooze == true) {
                     OutlinedButton(
                         onClick = { onTogglePenaltySnooze(true) },
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("penalty_snooze_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Snooze,
-                            contentDescription = "Штрафной Snooze"
+                            contentDescription = "Snooze"
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Штрафной Snooze (+${alarm.snoozeDurationMinutes} мин через фразу)")
+                        Text(
+                            text = s.penaltySnoozeBtn(alarm.snoozeDurationMinutes),
+                            textAlign = TextAlign.Center
+                        )
                     }
                 } else {
                     Row(
@@ -359,15 +381,16 @@ fun ActiveAlarmScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
-                            contentDescription = "Анти-Snooze",
+                            contentDescription = "Anti-Snooze",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Режим Анти-Snooze: перенос будильника заблокирован",
+                            text = s.antiSnoozeLockedLabel,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -409,12 +432,13 @@ private fun MissionExecutionContainer(
     onSubmitNfc: (String) -> Unit,
     onSubmitVoicePhrase: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     Card(
-        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, TacticalAmber, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -423,14 +447,17 @@ private fun MissionExecutionContainer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "МИССИЯ ${uiState.currentMissionIndex + 1} ИЗ ${uiState.totalMissionsInChain}",
+                    text = s.missionStepProgress(uiState.currentMissionIndex + 1, uiState.totalMissionsInChain),
                     style = MaterialTheme.typography.labelLarge,
-                    color = TacticalAmber
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = uiState.currentMissionType?.titleRu ?: "Задача",
+                    text = uiState.currentMissionType?.localizedTitle(s.isEnglish)
+                        ?: if (s.isEnglish) "Mission" else "Задача",
                     style = MaterialTheme.typography.titleMedium,
-                    color = RadarEmerald
+                    color = MaterialTheme.colorScheme.secondary
                 )
             }
 
@@ -440,7 +467,7 @@ private fun MissionExecutionContainer(
                 Text(
                     text = uiState.missionFeedback,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TacticalAmber
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -488,24 +515,25 @@ private fun MathMissionView(
     total: Int,
     onSubmitAnswer: (Int) -> Unit
 ) {
+    val s = LocalAppStrings.current
     var answerText by remember(prompt) { mutableStateOf("") }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Решено примеров: $step / $total",
+            text = s.mathSolvedProgress(step, total),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
         Surface(
-            color = ObsidianBg,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = prompt,
                 style = MaterialTheme.typography.displayMedium,
-                color = TacticalAmber,
+                color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .padding(vertical = 16.dp, horizontal = 12.dp)
@@ -516,7 +544,7 @@ private fun MathMissionView(
         OutlinedTextField(
             value = answerText,
             onValueChange = { answerText = it.filter { ch -> ch.isDigit() || ch == '-' } },
-            label = { Text("Ответ") },
+            label = { Text(s.mathAnswerLabel) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             modifier = Modifier
@@ -560,7 +588,7 @@ private fun MathMissionView(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .heightIn(min = 48.dp)
                         ) {
                             Text(
                                 text = key,
@@ -586,12 +614,13 @@ private fun MathMissionView(
                 containerColor = RadarEmerald,
                 contentColor = Color.Black
             ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
+                .heightIn(min = 52.dp)
                 .testTag("submit_math_button")
         ) {
-            Text("ПРОВЕРИТЬ ОТВЕТ", fontWeight = FontWeight.Bold)
+            Text(s.submitMathBtn, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }
 }
@@ -604,8 +633,11 @@ private fun StepsMissionView(
     onPermissionRefresh: () -> Unit,
     onStepDetected: (Int) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
-    var sensorSource by remember { mutableStateOf("Инициализация датчика...") }
+    var sensorSource by remember {
+        mutableStateOf(if (s.isEnglish) "Initializing step sensor..." else "Инициализация датчика...")
+    }
     var localSteps by remember { mutableIntStateOf(currentSteps) }
     var expectedNextFoot by remember { mutableIntStateOf(0) }
 
@@ -632,20 +664,22 @@ private fun StepsMissionView(
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Icon(
             imageVector = Icons.Default.DirectionsWalk,
-            contentDescription = "Шагомер",
-            tint = TacticalAmber,
+            contentDescription = "Steps",
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(40.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "${currentSteps.coerceAtLeast(localSteps)} / $targetSteps ШАГОВ",
+            text = s.stepsCountFormat(currentSteps.coerceAtLeast(localSteps), targetSteps),
             style = MaterialTheme.typography.displayMedium,
-            color = RadarEmerald
+            color = MaterialTheme.colorScheme.secondary,
+            textAlign = TextAlign.Center
         )
         Text(
-            text = "Источник: $sensorSource",
+            text = s.stepsSensorSource(sensorSource),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(10.dp))
         LinearProgressIndicator(
@@ -656,7 +690,7 @@ private fun StepsMissionView(
                 .fillMaxWidth()
                 .height(12.dp)
                 .clip(RoundedCornerShape(6.dp)),
-            color = RadarEmerald
+            color = MaterialTheme.colorScheme.secondary
         )
 
         if (!isPermissionGranted) {
@@ -667,15 +701,18 @@ private fun StepsMissionView(
                         permLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
             ) {
-                Text("Разрешить доступ к аппаратному шагомеру")
+                Text(s.grantStepSensorBtn, textAlign = TextAlign.Center)
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = "Идите с телефоном в руках или поочерёдно нажимайте «ЛЕВЫЙ ШАГ» / «ПРАВЫЙ ШАГ» (режим проверки на эмуляторе):",
+            text = s.stepsEmulatorHint,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -683,7 +720,8 @@ private fun StepsMissionView(
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
                 onClick = {
@@ -694,12 +732,13 @@ private fun StepsMissionView(
                     }
                 },
                 enabled = expectedNextFoot == 0,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .height(50.dp)
+                    .heightIn(min = 50.dp)
                     .testTag("step_left_button")
             ) {
-                Text("ЛЕВЫЙ ШАГ (+5)")
+                Text(s.leftStepBtn, textAlign = TextAlign.Center)
             }
             Button(
                 onClick = {
@@ -710,12 +749,13 @@ private fun StepsMissionView(
                     }
                 },
                 enabled = expectedNextFoot == 1,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .height(50.dp)
+                    .heightIn(min = 50.dp)
                     .testTag("step_right_button")
             ) {
-                Text("ПРАВЫЙ ШАГ (+5)")
+                Text(s.rightStepBtn, textAlign = TextAlign.Center)
             }
         }
     }
@@ -728,6 +768,7 @@ private fun QrMissionView(
     onPermissionRefresh: () -> Unit,
     onQrScanned: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var manualCodeInput by remember { mutableStateOf("") }
 
@@ -741,32 +782,45 @@ private fun QrMissionView(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Default.QrCodeScanner,
-                contentDescription = "Сканер QR",
-                tint = TacticalAmber
+                contentDescription = "QR Scanner",
+                tint = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Ожидается QR: $expectedPayload",
+                text = s.qrExpectedLabel(expectedPayload),
                 style = MaterialTheme.typography.labelLarge,
-                color = TacticalAmber
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
         if (isCameraPermissionGranted) {
+            val context = LocalContext.current
+            val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+            DisposableEffect(lifecycleOwner) {
+                onDispose {
+                    runCatching {
+                        ProcessCameraProvider.getInstance(context).get().unbindAll()
+                    }
+                    runCatching {
+                        cameraExecutor.shutdown()
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(210.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .border(2.dp, RadarEmerald, RoundedCornerShape(12.dp))
+                    .border(2.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(12.dp))
             ) {
                 AndroidView(
                     factory = { ctx ->
                         val previewView = PreviewView(ctx)
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                        val executor = Executors.newSingleThreadExecutor()
                         cameraProviderFuture.addListener({
                             runCatching {
                                 val cameraProvider = cameraProviderFuture.get()
@@ -779,7 +833,7 @@ private fun QrMissionView(
                                     .build()
                                     .also { analysis ->
                                         analysis.setAnalyzer(
-                                            executor,
+                                            cameraExecutor,
                                             ZxingQrCodeAnalyzer { decoded ->
                                                 ContextCompat.getMainExecutor(ctx).execute {
                                                     onQrScanned(decoded)
@@ -805,27 +859,29 @@ private fun QrMissionView(
         } else {
             Button(
                 onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .heightIn(min = 50.dp)
             ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Камера")
+                Icon(Icons.Default.CameraAlt, contentDescription = "Camera")
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Включить камеру для сканирования QR")
+                Text(s.enableCameraQrBtn, textAlign = TextAlign.Center)
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Резервный ввод (если камера недоступна в эмуляторе): введите точный код метки вручную",
+            text = s.qrFallbackHint,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
             value = manualCodeInput,
             onValueChange = { manualCodeInput = it },
-            label = { Text("Код метки ($expectedPayload)") },
+            label = { Text(s.qrInputLabel(expectedPayload)) },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -834,12 +890,13 @@ private fun QrMissionView(
         Spacer(modifier = Modifier.height(8.dp))
         Button(
             onClick = { onQrScanned(manualCodeInput) },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
                 .testTag("submit_qr_button")
         ) {
-            Text("ПОДТВЕРДИТЬ КОД МЕТКИ")
+            Text(s.submitQrBtn, textAlign = TextAlign.Center)
         }
     }
 }
@@ -849,32 +906,35 @@ private fun NfcMissionView(
     expectedTagId: String,
     onNfcSimulatedOrOverride: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     var manualOverride by remember { mutableStateOf("") }
     val requiredCode = if (expectedTagId == "*" || expectedTagId.isBlank()) "NFC-WAKE-CONFIRMED" else expectedTagId
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Icon(
             imageVector = Icons.Default.Nfc,
-            contentDescription = "NFC-ридер",
-            tint = TacticalAmber,
+            contentDescription = "NFC Reader",
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(44.dp)
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Приложите смартфон к NFC-метке",
+            text = s.nfcTitle,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
         )
         Text(
-            text = "Ожидаемый ID: ${if (expectedTagId == "*") "Любая зарегистрированная метка" else expectedTagId}",
+            text = s.nfcExpectedIdLabel(expectedTagId),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
             value = manualOverride,
             onValueChange = { manualOverride = it },
-            label = { Text("Резервный код без NFC: $requiredCode") },
+            label = { Text(s.nfcFallbackLabel(requiredCode)) },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -889,12 +949,13 @@ private fun NfcMissionView(
                     onNfcSimulatedOrOverride(manualOverride)
                 }
             },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
                 .testTag("submit_nfc_button")
         ) {
-            Text("ПОДТВЕРДИТЬ КАСАНИЕ NFC")
+            Text(s.submitNfcBtn, textAlign = TextAlign.Center)
         }
     }
 }
@@ -906,9 +967,15 @@ private fun VoiceMissionView(
     onPermissionRefresh: () -> Unit,
     onVoiceRecognized: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     var isListening by remember { mutableStateOf(false) }
-    var voiceStatus by remember { mutableStateOf("Нажмите кнопку микрофона и произнесите фразу вслух") }
+    var voiceStatus by remember {
+        mutableStateOf(
+            if (s.isEnglish) "Tap the microphone button and speak the phrase aloud"
+            else "Нажмите кнопку микрофона и произнесите фразу вслух"
+        )
+    }
     var rmsLevel by remember { mutableFloatStateOf(0f) }
     var manualPhraseInput by remember { mutableStateOf("") }
 
@@ -942,26 +1009,27 @@ private fun VoiceMissionView(
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Icon(
             imageVector = Icons.Default.Mic,
-            contentDescription = "Голосовая миссия",
-            tint = if (isListening) RadarEmerald else TacticalAmber,
+            contentDescription = "Voice Mission",
+            tint = if (isListening) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(44.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Произнесите контрольную фразу вслух:",
+            text = s.voiceInstruction,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(8.dp))
         Surface(
-            color = ObsidianBg,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = "«$expectedPhrase»",
                 style = MaterialTheme.typography.titleLarge,
-                color = TacticalAmber,
+                color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(14.dp)
             )
@@ -970,7 +1038,7 @@ private fun VoiceMissionView(
         Text(
             text = voiceStatus,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isListening) RadarEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isListening) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
         if (isListening) {
@@ -981,7 +1049,7 @@ private fun VoiceMissionView(
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(4.dp)),
-                color = RadarEmerald
+                color = MaterialTheme.colorScheme.secondary
             )
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -997,23 +1065,25 @@ private fun VoiceMissionView(
                 containerColor = TacticalAmber,
                 contentColor = Color.Black
             ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
+                .heightIn(min = 50.dp)
                 .testTag("start_voice_recognition_button")
         ) {
-            Icon(Icons.Default.Mic, contentDescription = "Говорить")
+            Icon(Icons.Default.Mic, contentDescription = "Speak")
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (isListening) "СЛУШАЮ... ГОВОРИТЕ" else "НАЧАТЬ РАСПОЗНАВАНИЕ ГОЛОСА",
-                fontWeight = FontWeight.Bold
+                text = if (isListening) s.voiceListeningBtn else s.voiceStartBtn,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
             value = manualPhraseInput,
             onValueChange = { manualPhraseInput = it },
-            label = { Text("Резервный ввод фразы вручную") },
+            label = { Text(s.voiceFallbackLabel) },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -1026,12 +1096,13 @@ private fun VoiceMissionView(
                 containerColor = RadarEmerald,
                 contentColor = Color.Black
             ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
                 .testTag("submit_voice_button")
         ) {
-            Text("ПОДТВЕРДИТЬ ФРАЗУ", fontWeight = FontWeight.Bold)
+            Text(s.submitVoiceBtn, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }
 }
@@ -1043,36 +1114,37 @@ private fun PenaltySnoozeCard(
     onSubmitPhrase: (String) -> Unit,
     onCancel: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     var typed by remember { mutableStateOf("") }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, TacticalAmber, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(
-                text = "ШТРАФНАЯ ЗАДАЧА ДЛЯ SNOOZE",
+                text = s.penaltyCardTitle,
                 style = MaterialTheme.typography.labelLarge,
-                color = TacticalAmber
+                color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Чтобы отложить сигнал на 5 минут, введите без ошибок фразу:",
+                text = s.penaltyCardInstruction,
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
-                color = ObsidianBg,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = requiredPhrase,
                     style = MaterialTheme.typography.titleMedium,
-                    color = TacticalAmber,
+                    color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(12.dp)
                 )
@@ -1085,7 +1157,7 @@ private fun PenaltySnoozeCard(
             OutlinedTextField(
                 value = typed,
                 onValueChange = { typed = it },
-                label = { Text("Повторите фразу") },
+                label = { Text(s.penaltyInputLabel) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1093,19 +1165,21 @@ private fun PenaltySnoozeCard(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = onCancel,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                 ) {
-                    Text("Назад")
+                    Text(s.backBtn, textAlign = TextAlign.Center)
                 }
                 Button(
                     onClick = { onSubmitPhrase(typed) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                 ) {
-                    Text("Подтвердить")
+                    Text(s.confirmBtn, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -1119,6 +1193,7 @@ private fun SunrisePreAlarmView(
     webhookStatus: String?,
     onWakeUpEarly: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val dawnGradient = Brush.verticalGradient(
         colors = listOf(
             Color(0xFF3A1C00),
@@ -1137,15 +1212,16 @@ private fun SunrisePreAlarmView(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 imageVector = Icons.Default.WbSunny,
-                contentDescription = "Рассвет",
+                contentDescription = s.sunrisePhaseHeader,
                 tint = Color(0xFFFFFBEB),
                 modifier = Modifier.size(72.dp)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "ФАЗА «РАССВЕТ» (T−15 МИН)",
+                text = s.sunrisePhaseHeader,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFFFFFBEB)
+                color = Color(0xFFFFFBEB),
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -1156,11 +1232,12 @@ private fun SunrisePreAlarmView(
             Text(
                 text = alarmLabel,
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color(0xFFFEF3C7)
+                color = Color(0xFFFEF3C7),
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Мягкий световой поток экрана и команда на умную лампу подготавливают организм к пробуждению до боевого сигнала T0.",
+                text = s.sunriseDescription,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color(0xFF1E293B),
                 textAlign = TextAlign.Center
@@ -1181,12 +1258,13 @@ private fun SunrisePreAlarmView(
                     containerColor = Color(0xFF0F172A),
                     contentColor = Color.White
                 ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .heightIn(min = 54.dp)
                     .testTag("dismiss_sunrise_button")
             ) {
-                Text("Я УЖЕ ПРОСНУЛСЯ • ЗАВЕРШИТЬ РАССВЕТ", fontWeight = FontWeight.Bold)
+                Text(s.dismissSunriseBtn, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             }
         }
     }
@@ -1198,20 +1276,21 @@ private fun AntiReturnVerificationView(
     secondsRemaining: Int,
     onConfirmAwake: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ObsidianBg)
+            .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = SlateSurface),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(2.dp, TacticalAmber, RoundedCornerShape(20.dp))
+                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp))
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -1219,26 +1298,26 @@ private fun AntiReturnVerificationView(
             ) {
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Контроль анти-возврата",
-                    tint = TacticalAmber,
+                    contentDescription = s.antiReturnHeader,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(56.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "КОНТРОЛЬ АНТИ-ВОЗВРАТА В КРОВАТЬ",
+                    text = s.antiReturnHeader,
                     style = MaterialTheme.typography.labelLarge,
-                    color = TacticalAmber,
+                    color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "$secondsRemaining СЕК",
+                    text = s.antiReturnSecondsFormat(secondsRemaining),
                     style = MaterialTheme.typography.displayLarge,
                     color = AlertCrimson
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Будильник «$alarmLabel»: подтвердите, что вы не легли обратно в кровать. Если таймер истечёт, боевая тревога и миссии запустятся заново!",
+                    text = s.antiReturnBody(alarmLabel),
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface
@@ -1250,15 +1329,17 @@ private fun AntiReturnVerificationView(
                         containerColor = RadarEmerald,
                         contentColor = Color.Black
                     ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .heightIn(min = 56.dp)
                         .testTag("confirm_anti_return_button")
                 ) {
                     Text(
-                        text = "Я БОДРСТВУЮ • НЕ В КРОВАТИ",
+                        text = s.confirmAntiReturnBtn,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
                     )
                 }
             }

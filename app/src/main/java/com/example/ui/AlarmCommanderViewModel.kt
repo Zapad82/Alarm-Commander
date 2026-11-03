@@ -40,6 +40,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
     private val settingsRepository = SettingsRepository(appContext)
     private val scheduler = AlarmScheduler(appContext)
     val permissionManager = PermissionManager(appContext)
+    val safetyAuditor = com.example.permissions.SafetyAndPowerAuditor(appContext)
 
     val alarmsFlow: StateFlow<List<AlarmEntity>> = repository.alarmsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -55,11 +56,26 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
     private val _permissionsState = MutableStateFlow<List<PermissionItemStatus>>(emptyList())
     val permissionsState: StateFlow<List<PermissionItemStatus>> = _permissionsState.asStateFlow()
 
+    private val _auditReportState = MutableStateFlow(safetyAuditor.runFullAudit(CommanderSettingsState()))
+    val auditReportState: StateFlow<com.example.permissions.SafetyAndPowerReport> = _auditReportState.asStateFlow()
+
     private val _statusBannerMessage = MutableStateFlow<String?>(null)
     val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
 
+    private val _githubReleaseState = MutableStateFlow(com.example.settings.GitHubReleaseCheckResult())
+    val githubReleaseState: StateFlow<com.example.settings.GitHubReleaseCheckResult> = _githubReleaseState.asStateFlow()
+
+    val apkSignatureSha256: String by lazy {
+        com.example.settings.GitHubUpdateChecker.getSigningCertificateSha256(appContext)
+    }
+
     init {
         refreshPermissions()
+        viewModelScope.launch {
+            settingsFlow.collect { currentSettings ->
+                _auditReportState.value = safetyAuditor.runFullAudit(currentSettings)
+            }
+        }
         viewModelScope.launch {
             val seeded = repository.ensureSeededDefaults()
             seeded.filter { it.enabled }.forEach { scheduler.scheduleAlarm(it) }
@@ -82,10 +98,36 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
 
     fun refreshPermissions() {
         _permissionsState.value = permissionManager.evaluateAllPermissions()
+        _auditReportState.value = safetyAuditor.runFullAudit(settingsFlow.value)
     }
 
     fun clearBannerMessage() {
         _statusBannerMessage.value = null
+    }
+
+    fun setLanguageMode(mode: AppLanguageMode) {
+        viewModelScope.launch {
+            settingsRepository.setLanguageMode(mode.name)
+        }
+    }
+
+    fun setThemeMode(mode: AppThemeMode) {
+        viewModelScope.launch {
+            settingsRepository.setThemeMode(mode.name)
+        }
+    }
+
+    fun checkGithubUpdates(repoSlug: String) {
+        viewModelScope.launch {
+            settingsRepository.setGithubRepoSlug(repoSlug)
+            _githubReleaseState.value = _githubReleaseState.value.copy(isChecking = true)
+            val currentVer = com.example.BuildConfig.VERSION_NAME
+            val res = com.example.settings.GitHubUpdateChecker.checkLatestRelease(
+                repoSlug = repoSlug,
+                currentVersionName = currentVer
+            )
+            _githubReleaseState.value = res
+        }
     }
 
     fun acceptDisclaimer() {
@@ -108,10 +150,10 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             if (savedEntity.enabled) {
                 scheduler.scheduleAlarm(savedEntity)
                 _statusBannerMessage.value =
-                    "Будильник «${savedEntity.label}» запланирован на ${savedEntity.formattedTime()}"
+                    "«${savedEntity.label}» → ${savedEntity.formattedTime()}"
             } else {
                 scheduler.cancelAlarm(savedId)
-                _statusBannerMessage.value = "Будильник «${savedEntity.label}» выключен"
+                _statusBannerMessage.value = "«${savedEntity.label}» OFF"
             }
         }
     }
@@ -124,7 +166,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             scheduler.cancelAlarm(alarm.id)
             repository.deleteAlarm(alarm)
-            _statusBannerMessage.value = "Удалён рубеж «${alarm.label}»"
+            _statusBannerMessage.value = "Удалён / Deleted: «${alarm.label}»"
         }
     }
 
@@ -211,7 +253,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
                 defaultQrPayload = defaultQrPayload,
                 defaultNfcTagId = defaultNfcTagId
             )
-            _statusBannerMessage.value = "Настройки резервных каналов и меток сохранены"
+            _statusBannerMessage.value = "Настройки сохранены / Settings saved"
         }
     }
 
@@ -220,14 +262,14 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             val result = SmartHomeWebhookChannel().trigger(
                 BackupPayload(
                     alarmId = 0L,
-                    alarmLabel = "Тест канала Умного дома",
+                    alarmLabel = "Webhook Test",
                     eventType = eventType,
                     targetUrlOrAddress = url
                 )
             )
             repository.logEvent(
                 alarmId = 0L,
-                alarmLabel = "Тест Webhook",
+                alarmLabel = "Webhook Test",
                 eventType = "WEBHOOK_TEST",
                 state = AlarmState.SCHEDULED,
                 details = result.messageRu
@@ -241,7 +283,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             val result = SocialContactChannel(appContext).trigger(
                 BackupPayload(
                     alarmId = 0L,
-                    alarmLabel = "Проверка резервного контакта",
+                    alarmLabel = "Contact Test",
                     eventType = "MANUAL_CONTACT_TEST",
                     targetUrlOrAddress = "",
                     contactName = name,
@@ -250,7 +292,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             )
             repository.logEvent(
                 alarmId = 0L,
-                alarmLabel = "Тест контакта",
+                alarmLabel = "Contact Test",
                 eventType = "CONTACT_TEST",
                 state = AlarmState.SCHEDULED,
                 details = result.messageRu
@@ -270,7 +312,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             val res = channel.trigger(
                 BackupPayload(
                     alarmId = 0L,
-                    alarmLabel = "Тест Stub-канала",
+                    alarmLabel = "Stub Test",
                     eventType = "STUB_PING",
                     targetUrlOrAddress = "local://stub"
                 )
@@ -289,7 +331,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
     fun clearEventLogs() {
         viewModelScope.launch {
             repository.clearLogs()
-            _statusBannerMessage.value = "Локальный журнал событий очищен"
+            _statusBannerMessage.value = "Журнал очищен / Logs cleared"
         }
     }
 }

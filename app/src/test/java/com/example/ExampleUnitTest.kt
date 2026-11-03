@@ -1,6 +1,8 @@
 package com.example
 
 import com.example.alarm.AlarmScheduler
+import com.example.backup.BackupPayload
+import com.example.backup.WebhookSecurityValidator
 import com.example.data.AlarmState
 import com.example.data.EscalationProfile
 import com.example.data.MathDifficulty
@@ -20,7 +22,8 @@ import org.junit.Test
 import kotlin.random.Random
 
 /**
- * Unit-тесты для EscalationEngine, MissionValidator (Math, Steps, QR, NFC, Voice),
+ * Unit-тесты для EscalationEngine (включая Eco-режим и защиту от разряда батареи),
+ * WebhookSecurityValidator, MissionValidator (Math, Steps, QR, NFC, Voice),
  * MissionChainCoordinator и расчёта времени будильника.
  */
 class ExampleUnitTest {
@@ -43,31 +46,74 @@ class ExampleUnitTest {
         val t0 = 1_700_000_000_000L
         engine.startSession(alarmId = 7L, profile = EscalationProfile.HARD, nowEpochMs = t0)
 
-        // Stage 1 (0 сек)
         val snapStage1 = engine.evaluateTick(t0 + 5_000L)
         assertEquals(1, snapStage1.stage)
         assertEquals(45, snapStage1.volumePercent)
         assertEquals(AlarmState.RINGING, snapStage1.state)
         assertFalse(snapStage1.dualToneActive)
 
-        // Stage 2 (30 сек для профиля HARD)
         val snapStage2 = engine.evaluateTick(t0 + 35_000L)
         assertEquals(2, snapStage2.stage)
         assertEquals(80, snapStage2.volumePercent)
         assertEquals(AlarmState.ESCALATING, snapStage2.state)
         assertTrue(snapStage2.dualToneActive)
 
-        // Stage 3 (60 сек для профиля HARD)
         val snapStage3 = engine.evaluateTick(t0 + 65_000L)
         assertEquals(3, snapStage3.stage)
         assertEquals(100, snapStage3.volumePercent)
         assertTrue(snapStage3.safeScreenPulseActive)
 
-        // Stage 4 Overdue (180 сек для профиля HARD)
         val snapOverdue = engine.evaluateTick(t0 + 185_000L)
         assertEquals(4, snapOverdue.stage)
         assertEquals(AlarmState.OVERDUE, snapOverdue.state)
         assertTrue(snapOverdue.overdueTriggered)
+    }
+
+    @Test
+    fun escalationEngine_enforcesLowBatteryEcoModeAndHardCutoff() {
+        val engine = EscalationEngine()
+        val t0 = 1_700_000_000_000L
+        engine.startSession(alarmId = 99L, profile = EscalationProfile.EXTREME_SAFE, nowEpochMs = t0)
+
+        // В режиме низкого заряда (lowBatteryEcoMode = true) на 50-й секунде:
+        // вибрация ограничена уровнем 1, пульсация экрана отключена
+        val ecoTick = engine.evaluateTick(nowEpochMs = t0 + 50_000L, lowBatteryEcoMode = true)
+        assertTrue(ecoTick.ecoModeActive)
+        assertEquals(1, ecoTick.vibrationCadenceLevel)
+        assertFalse("В Eco-режиме пульсация экрана должна отключаться", ecoTick.safeScreenPulseActive)
+
+        // Через 305 секунд (5+ минут) в режиме низкого заряда срабатывает жёсткий предохранитель батареи
+        val cutoffTick = engine.evaluateTick(nowEpochMs = t0 + 305_000L, lowBatteryEcoMode = true)
+        assertTrue(cutoffTick.batterySafetyCutoffReached)
+        assertEquals(0, cutoffTick.volumePercent)
+        assertEquals(0, cutoffTick.vibrationCadenceLevel)
+    }
+
+    @Test
+    fun webhookSecurityValidator_allowsHttpsAndPrivateLanButBlocksPublicHttp() {
+        assertTrue(
+            WebhookSecurityValidator.validateWebhookUrl("https://hooks.nabu.casa/api/webhook/123").isAllowed
+        )
+        assertTrue(
+            WebhookSecurityValidator.validateWebhookUrl("http://192.168.1.100:8123/api/webhook/alarm").isAllowed
+        )
+        assertTrue(
+            WebhookSecurityValidator.validateWebhookUrl("http://homeassistant.local:8123/api/webhook/alarm").isAllowed
+        )
+        assertFalse(
+            "Открытый HTTP во внешнюю сеть должен блокироваться",
+            WebhookSecurityValidator.validateWebhookUrl("http://example.com/api/webhook").isAllowed
+        )
+
+        val payload = BackupPayload(
+            alarmId = 5L,
+            alarmLabel = "Тест \"кавычек\" \\ и спецсимволов",
+            eventType = "SUNRISE_T_MINUS_15",
+            targetUrlOrAddress = "http://192.168.1.100/hook"
+        )
+        val json = WebhookSecurityValidator.buildSafeJsonBody(payload, timestampMs = 123456L)
+        assertTrue(json.contains("\"alarmId\":5"))
+        assertTrue(json.contains("AlarmCommander"))
     }
 
     @Test
@@ -174,5 +220,21 @@ class ExampleUnitTest {
             nowEpochMs = now
         )
         assertTrue("Следующее срабатывание должно быть строго в будущем", next > now)
+    }
+
+    @Test
+    fun githubUpdateCheckerAndLocalization_validatesVersionAndLocaleResolution() {
+        assertTrue(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("v1.1.0", "1.0"))
+        assertTrue(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("2.0", "1.9.5"))
+        assertFalse(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("v1.0", "1.0"))
+        assertFalse(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("0.9", "1.0"))
+
+        assertTrue(com.example.ui.AppLanguageMode.EN.resolveIsEnglish(java.util.Locale("ru")))
+        assertFalse(com.example.ui.AppLanguageMode.RU.resolveIsEnglish(java.util.Locale.ENGLISH))
+        assertTrue(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale.US))
+        assertFalse(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale("ru", "RU")))
+
+        assertEquals(com.example.ui.AppThemeMode.LIGHT, com.example.ui.AppThemeMode.fromStorage("LIGHT"))
+        assertEquals(com.example.ui.AppThemeMode.DARK, com.example.ui.AppThemeMode.fromStorage("DARK"))
     }
 }

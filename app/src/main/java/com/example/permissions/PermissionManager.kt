@@ -18,8 +18,15 @@ data class PermissionItemStatus(
     val whyNeededRu: String,
     val isGranted: Boolean,
     val isOptional: Boolean = false,
-    val actionLabelRu: String
-)
+    val actionLabelRu: String,
+    val titleEn: String = titleRu,
+    val whyNeededEn: String = whyNeededRu,
+    val actionLabelEn: String = actionLabelRu
+) {
+    fun title(isEn: Boolean): String = if (isEn) titleEn else titleRu
+    fun whyNeeded(isEn: Boolean): String = if (isEn) whyNeededEn else whyNeededRu
+    fun actionLabel(isEn: Boolean): String = if (isEn) actionLabelEn else actionLabelRu
+}
 
 /**
  * Централизованный менеджер проверки и пошагового объяснения разрешений Android 8–16.
@@ -103,21 +110,30 @@ class PermissionManager(private val context: Context) {
                 titleRu = "Точные будильники (Exact Alarm)",
                 whyNeededRu = "Гарантирует пробуждение процессора ровно в T0 через AlarmManager.setAlarmClock даже в режиме глубокого сна Doze.",
                 isGranted = canScheduleExactAlarms(),
-                actionLabelRu = "Открыть настройки точных будильников"
+                actionLabelRu = "Открыть настройки точных будильников",
+                titleEn = "Exact Alarms (AlarmClock)",
+                whyNeededEn = "Guarantees CPU wake-up at exact T0 via AlarmManager.setAlarmClock even inside deep Doze mode.",
+                actionLabelEn = "Open Exact Alarm Settings"
             ),
             PermissionItemStatus(
                 id = "FULL_SCREEN_INTENT",
                 titleRu = "Полноэкранный вызов (Full-Screen Intent)",
                 whyNeededRu = "Позволяет развернуть экран будильника поверх заблокированного экрана без использования опасного SYSTEM_ALERT_WINDOW.",
                 isGranted = canUseFullScreenIntent(),
-                actionLabelRu = "Разрешить полноэкранные уведомления"
+                actionLabelRu = "Разрешить полноэкранные уведомления",
+                titleEn = "Full-Screen Intent Over Lockscreen",
+                whyNeededEn = "Launches the combat alarm screen over the lockscreen without requiring dangerous SYSTEM_ALERT_WINDOW.",
+                actionLabelEn = "Allow Full-Screen Notifications"
             ),
             PermissionItemStatus(
                 id = "POST_NOTIFICATIONS",
                 titleRu = "Экстренные уведомления",
                 whyNeededRu = "Необходимо для работы Foreground-сервиса звонка, отображения миссии и проверки анти-возврата.",
                 isGranted = isPostNotificationsGranted(),
-                actionLabelRu = "Выдать разрешение уведомлений"
+                actionLabelRu = "Выдать разрешение уведомлений",
+                titleEn = "High-Priority Notifications",
+                whyNeededEn = "Required for the Foreground alarm service, active mission status, and anti-return verification.",
+                actionLabelEn = "Grant Notification Permission"
             ),
             PermissionItemStatus(
                 id = "BATTERY_OPTIMIZATION",
@@ -125,21 +141,30 @@ class PermissionManager(private val context: Context) {
                 whyNeededRu = "Предотвращает принудительную выгрузку фонового сервиса будильника агрессивными оболочками (MIUI, OneUI, HyperOS).",
                 isGranted = isIgnoringBatteryOptimizations(),
                 isOptional = true,
-                actionLabelRu = "Открыть настройки экономии заряда"
+                actionLabelRu = "Открыть настройки экономии заряда",
+                titleEn = "Unrestricted Battery (Doze / OEM)",
+                whyNeededEn = "Prevents aggressive OEM shells (MIUI, OneUI, HyperOS) from killing the foreground alarm service.",
+                actionLabelEn = "Open Battery Optimization Settings"
             ),
             PermissionItemStatus(
                 id = "CAMERA",
                 titleRu = "Камера (только для миссии QR-код)",
                 whyNeededRu = "Используется исключительно локально в момент сканирования QR-кода в ванной. Никакие фото или видео не сохраняются.",
                 isGranted = isCameraGranted(),
-                actionLabelRu = "Разрешить доступ к камере"
+                actionLabelRu = "Разрешить доступ к камере",
+                titleEn = "Camera (QR Code Mission Only)",
+                whyNeededEn = "Used strictly on-device while scanning your bathroom QR target. Zero photos or videos are stored.",
+                actionLabelEn = "Grant Camera Permission"
             ),
             PermissionItemStatus(
                 id = "ACTIVITY_RECOGNITION",
                 titleRu = "Датчик шагов (только для миссии Шагомер)",
                 whyNeededRu = "Позволяет считать 50–100 физических шагов для подтверждения того, что вы встали с кровати.",
                 isGranted = isActivityRecognitionGranted(),
-                actionLabelRu = "Разрешить датчик физической активности"
+                actionLabelRu = "Разрешить датчик физической активности",
+                titleEn = "Step Sensor (Steps Mission Only)",
+                whyNeededEn = "Counts 50–100 physical steps to verify that you have physically left the bed.",
+                actionLabelEn = "Grant Physical Activity Permission"
             ),
             PermissionItemStatus(
                 id = "RECORD_AUDIO",
@@ -147,7 +172,10 @@ class PermissionManager(private val context: Context) {
                 whyNeededRu = "Используется только во время голосовой миссии для распознавания контрольной фразы через SpeechRecognizer без сохранения записи.",
                 isGranted = isRecordAudioGranted(),
                 isOptional = true,
-                actionLabelRu = "Разрешить микрофон для голосовой миссии"
+                actionLabelRu = "Разрешить микрофон для голосовой миссии",
+                titleEn = "Microphone (Voice Phrase Mission Only)",
+                whyNeededEn = "Used strictly during the voice mission via SpeechRecognizer without recording or storing audio.",
+                actionLabelEn = "Grant Microphone Permission"
             ),
             PermissionItemStatus(
                 id = "DND_BYPASS",
@@ -155,7 +183,10 @@ class PermissionManager(private val context: Context) {
                 whyNeededRu = "Позволяет будильнику звучать на полной громкости, даже если на телефоне случайно оставлен фильтр DND.",
                 isGranted = isDndPolicyGranted(),
                 isOptional = true,
-                actionLabelRu = "Настроить доступ к «Не беспокоить»"
+                actionLabelRu = "Настроить доступ к «Не беспокоить»",
+                titleEn = "Do Not Disturb Bypass (Optional)",
+                whyNeededEn = "Allows the alarm to sound at full volume even if DND mode was accidentally left enabled.",
+                actionLabelEn = "Configure DND Access"
             ),
             PermissionItemStatus(
                 id = "NFC_ADAPTER",
@@ -163,7 +194,10 @@ class PermissionManager(private val context: Context) {
                 whyNeededRu = "Нужен для миссии касания NFC-метки. Если NFC отсутствует, миссия предложит резервный когнитивный ввод.",
                 isGranted = isNfcAvailableAndEnabled(),
                 isOptional = true,
-                actionLabelRu = "Открыть настройки NFC"
+                actionLabelRu = "Открыть настройки NFC",
+                titleEn = "Hardware NFC Adapter (Optional)",
+                whyNeededEn = "Used for the NFC tag mission. If NFC is unavailable, a fallback cognitive code input is provided.",
+                actionLabelEn = "Open NFC Settings"
             )
         )
     }

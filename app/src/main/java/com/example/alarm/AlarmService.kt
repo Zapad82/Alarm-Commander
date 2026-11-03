@@ -276,15 +276,34 @@ class AlarmService : Service() {
     private fun startEscalationLoop(alarm: AlarmEntity) {
         tickerJob?.cancel()
         var lastLoggedStage = 1
+        var cutoffLogged = false
+        val safetyAuditor = com.example.permissions.SafetyAndPowerAuditor(applicationContext)
         tickerJob = serviceScope.launch {
             while (isActive) {
-                val snap = escalationEngine.evaluateTick()
-                audioController.startOrUpdate(
-                    stage = snap.stage,
-                    volumePercent = snap.volumePercent,
-                    dualTone = snap.dualToneActive,
-                    vibrationCadenceLevel = snap.vibrationCadenceLevel
-                )
+                val isLowBattery = safetyAuditor.isCriticallyLowBattery()
+                val snap = escalationEngine.evaluateTick(lowBatteryEcoMode = isLowBattery)
+
+                if (snap.batterySafetyCutoffReached) {
+                    audioController.stopAll()
+                    releaseWakeLock()
+                    if (!cutoffLogged) {
+                        cutoffLogged = true
+                        repository.logEvent(
+                            alarmId = alarm.id,
+                            alarmLabel = alarm.label,
+                            eventType = "BATTERY_SAFE_AUTO_CUTOFF",
+                            state = AlarmState.OVERDUE,
+                            details = snap.statusDescriptionRu
+                        )
+                    }
+                } else {
+                    audioController.startOrUpdate(
+                        stage = snap.stage,
+                        volumePercent = snap.volumePercent,
+                        dualTone = snap.dualToneActive,
+                        vibrationCadenceLevel = snap.vibrationCadenceLevel
+                    )
+                }
 
                 if (snap.stage > lastLoggedStage && snap.stage in 2..4) {
                     lastLoggedStage = snap.stage
@@ -683,7 +702,8 @@ class AlarmService : Service() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "AlarmCommander::AlarmRingWakeLock"
         ).apply {
-            acquire(15 * 60 * 1000L) // Максимум 15 минут непрерывного удержания CPU
+            setReferenceCounted(false)
+            acquire(10 * 60 * 1000L) // Строгий лимит 10 минут удержания CPU для защиты батареи
         }
     }
 

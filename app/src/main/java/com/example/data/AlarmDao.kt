@@ -41,6 +41,13 @@ interface AlarmDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: AlarmLogEntity): Long
 
+    /**
+     * Автоматическая ротация журнала: сохраняет не более 500 последних событий,
+     * предотвращая разрастание локальной базы данных.
+     */
+    @Query("DELETE FROM alarm_logs WHERE id NOT IN (SELECT id FROM alarm_logs ORDER BY timestamp DESC LIMIT 500)")
+    suspend fun pruneOldLogs()
+
     @Query("DELETE FROM alarm_logs")
     suspend fun clearAllLogs()
 }

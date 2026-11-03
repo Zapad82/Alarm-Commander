@@ -58,13 +58,14 @@ class AlarmRepository(private val dao: AlarmDao) {
         dao.insertLog(
             AlarmLogEntity(
                 alarmId = alarmId,
-                alarmLabel = alarmLabel,
+                alarmLabel = alarmLabel.take(100),
                 timestamp = System.currentTimeMillis(),
-                eventType = eventType,
+                eventType = eventType.take(50),
                 stateName = state.name,
-                details = details
+                details = details.take(400)
             )
         )
+        dao.pruneOldLogs()
     }
 
     suspend fun clearLogs() {

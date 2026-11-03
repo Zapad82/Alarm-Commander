@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,25 +72,36 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.R
 import com.example.alarm.AlarmScheduler
 import com.example.data.AlarmEntity
 import com.example.data.EscalationProfile
 import com.example.data.MathDifficulty
 import com.example.data.MissionType
+import com.example.ui.AppStrings
+import com.example.ui.LocalAppStrings
+import com.example.ui.localizedBadge
+import com.example.ui.localizedLabel
+import com.example.ui.localizedSubtitle
+import com.example.ui.localizedTitle
 import com.example.ui.theme.AlertCrimson
-import com.example.ui.theme.CyanTelemetry
 import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.RadarEmerald
-import com.example.ui.theme.SlateSurface
-import com.example.ui.theme.SlateSurfaceVariant
 import com.example.ui.theme.TacticalAmber
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+private fun AlarmEntity.localizedDaysSummary(s: AppStrings): String {
+    val d = daysOfWeek
+    if (d.size == 7) return s.everyDay
+    if (d == setOf(1, 2, 3, 4, 5)) return s.weekdays
+    if (d == setOf(6, 7)) return s.weekends
+    val map = s.dayNamesShort.toMap()
+    return d.sorted().mapNotNull { map[it] }.joinToString(", ")
+}
 
 @Composable
 fun CommandCenterScreen(
@@ -106,6 +118,7 @@ fun CommandCenterScreen(
     onTriggerTestAlarm: (Long, Boolean) -> Unit,
     onTriggerAntiReturnTest: (Long) -> Unit
 ) {
+    val s = LocalAppStrings.current
     var editingAlarm by remember { mutableStateOf<AlarmEntity?>(null) }
     var showEditorDialog by remember { mutableStateOf(false) }
     var showDisclaimerDialog by remember { mutableStateOf(!disclaimerAccepted) }
@@ -116,15 +129,15 @@ fun CommandCenterScreen(
             icon = {
                 Icon(
                     imageVector = Icons.Default.Security,
-                    contentDescription = "Безопасность",
-                    tint = TacticalAmber
+                    contentDescription = s.disclaimerTitle,
+                    tint = MaterialTheme.colorScheme.primary
                 )
             },
             title = {
-                Text(stringResource(R.string.disclaimer_title))
+                Text(s.disclaimerTitle)
             },
             text = {
-                Text(stringResource(R.string.disclaimer_body))
+                Text(s.disclaimerBody)
             },
             confirmButton = {
                 Button(
@@ -132,9 +145,11 @@ fun CommandCenterScreen(
                         showDisclaimerDialog = false
                         onAcceptDisclaimer()
                     },
-                    modifier = Modifier.testTag("accept_disclaimer_button")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("accept_disclaimer_button")
                 ) {
-                    Text(stringResource(R.string.disclaimer_accept))
+                    Text(s.disclaimerAccept, textAlign = TextAlign.Center)
                 }
             }
         )
@@ -173,7 +188,7 @@ fun CommandCenterScreen(
             // 2. Обязательный дисклеймер безопасности
             item {
                 Surface(
-                    color = SlateSurfaceVariant,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -185,13 +200,13 @@ fun CommandCenterScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
-                            contentDescription = "Дисклеймер",
-                            tint = TacticalAmber,
+                            contentDescription = s.disclaimerTitle,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = stringResource(R.string.disclaimer_banner_short),
+                            text = s.disclaimerShortBanner,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
@@ -204,28 +219,33 @@ fun CommandCenterScreen(
             item {
                 val primaryAlarmId = alarms.firstOrNull()?.id ?: 999L
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, TacticalAmber.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                            RoundedCornerShape(16.dp)
+                        )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "ПОЛИГОН ПРОВЕРКИ СИГНАЛА И МИССИЙ",
+                            text = s.provingGroundTitle,
                             style = MaterialTheme.typography.labelLarge,
-                            color = TacticalAmber
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Проверьте эскалацию громкости, блокировку кнопки «Назад», цепочку миссий и контроль анти-возврата прямо сейчас.",
+                            text = s.provingGroundSubtitle,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
                                 onClick = { onTriggerTestAlarm(primaryAlarmId, false) },
@@ -233,44 +253,58 @@ fun CommandCenterScreen(
                                     containerColor = TacticalAmber,
                                     contentColor = Color.Black
                                 ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .heightIn(min = 48.dp)
                                     .testTag("combat_test_t0_button")
                             ) {
                                 Icon(
                                     Icons.Default.PlayArrow,
-                                    contentDescription = "Боевой тест T0",
+                                    contentDescription = s.testT0Btn,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Тест T0", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = s.testT0Btn,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                             OutlinedButton(
                                 onClick = { onTriggerTestAlarm(primaryAlarmId, true) },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .heightIn(min = 48.dp)
                                     .testTag("combat_test_sunrise_button")
                             ) {
                                 Icon(
                                     Icons.Default.WbSunny,
-                                    contentDescription = "Тест Рассвета",
+                                    contentDescription = s.testSunriseBtn,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Рассвет T−15")
+                                Text(
+                                    text = s.testSunriseBtn,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = { onTriggerAntiReturnTest(primaryAlarmId) },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(46.dp)
+                                .heightIn(min = 48.dp)
                                 .testTag("combat_test_anti_return_button")
                         ) {
-                            Text("Тест «Анти-возврат в кровать» (таймер 60 сек)")
+                            Text(
+                                text = s.testAntiReturnBtn,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
@@ -279,7 +313,7 @@ fun CommandCenterScreen(
             if (alarms.isEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -291,20 +325,22 @@ fun CommandCenterScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Alarm,
-                                contentDescription = "Нет будильников",
-                                tint = TacticalAmber,
+                                contentDescription = s.emptyAlarmsTitle,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = stringResource(R.string.empty_alarms_title),
-                                style = MaterialTheme.typography.titleLarge
+                                text = s.emptyAlarmsTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = stringResource(R.string.empty_alarms_Hint),
+                                text = s.emptyAlarmsHint,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -338,14 +374,15 @@ fun CommandCenterScreen(
                 .testTag("add_alarm_fab")
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Создать будильник")
+                Icon(Icons.Default.Add, contentDescription = s.newAlarmBtn)
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = stringResource(R.string.btn_new_alarm),
-                    style = MaterialTheme.typography.labelLarge
+                    text = s.newAlarmBtn,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -358,6 +395,7 @@ private fun TacticalRadarHeroBanner(
     grantedPermissionsCount: Int,
     totalPermissionsCount: Int
 ) {
+    val s = LocalAppStrings.current
     val nowMs = System.currentTimeMillis()
     val nextPair = remember(alarms) {
         alarms.filter { it.enabled }
@@ -384,11 +422,15 @@ private fun TacticalRadarHeroBanner(
     )
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, RadarEmerald.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f),
+                RoundedCornerShape(16.dp)
+            )
     ) {
         Row(
             modifier = Modifier
@@ -398,7 +440,7 @@ private fun TacticalRadarHeroBanner(
         ) {
             // Анимированный тактический радар (Canvas)
             Box(
-                modifier = Modifier.size(76.dp),
+                modifier = Modifier.size(72.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -444,14 +486,16 @@ private fun TacticalRadarHeroBanner(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "ДЕЖУРСТВО АКТИВНО",
+                        text = s.radarDutyActive,
                         style = MaterialTheme.typography.labelSmall,
-                        color = RadarEmerald
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "ОС: $grantedPermissionsCount/$totalPermissionsCount",
+                        text = s.osPermissionsShort(grantedPermissionsCount, totalPermissionsCount),
                         style = MaterialTheme.typography.labelSmall,
-                        color = CyanTelemetry
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -461,24 +505,24 @@ private fun TacticalRadarHeroBanner(
                     val hours = diffMinutes / 60
                     val mins = diffMinutes % 60
                     Text(
-                        text = "Следующий T0: ${alarm.formattedTime()} (через ${hours}ч ${mins}м)",
+                        text = s.nextT0Format(alarm.formattedTime(), hours, mins),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${alarm.label} • Профиль ${alarm.profileEnum.name}",
+                        text = s.profileLabelFormat(alarm.label, alarm.profileEnum.name),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TacticalAmber
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Text(
-                        text = "Все рубежи отключены",
+                        text = s.allAlarmsDisabled,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Включите будильник или запустите боевой тест T0 ниже",
+                        text = s.enableAlarmOrTestHint,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -497,14 +541,15 @@ private fun AlarmCardItem(
     onDelete: () -> Unit,
     onTestNow: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val profileColor = when (alarm.profileEnum) {
-        EscalationProfile.GENTLE -> RadarEmerald
-        EscalationProfile.HARD -> TacticalAmber
-        EscalationProfile.EXTREME_SAFE -> AlertCrimson
+        EscalationProfile.GENTLE -> MaterialTheme.colorScheme.secondary
+        EscalationProfile.HARD -> MaterialTheme.colorScheme.primary
+        EscalationProfile.EXTREME_SAFE -> MaterialTheme.colorScheme.error
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -532,11 +577,12 @@ private fun AlarmCardItem(
                         }
                     )
                     Text(
-                        text = "${alarm.label} • ${alarm.formattedDaysShort()}",
+                        text = "${alarm.label} • ${alarm.localizedDaysSummary(s)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Switch(
                     checked = alarm.enabled,
                     onCheckedChange = onToggle,
@@ -551,23 +597,31 @@ private fun AlarmCardItem(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 BadgePill(
-                    text = "Эскалация: ${alarm.profileEnum.name}",
+                    text = s.escalationBadge(alarm.profileEnum.name),
                     color = profileColor
                 )
                 BadgePill(
-                    text = "Миссии: ${alarm.missionChain.joinToString(" → ") { it.badgeRu }}",
-                    color = TacticalAmber
+                    text = s.missionsBadge(
+                        alarm.missionChain.joinToString(" → ") { it.localizedBadge(s.isEnglish) }
+                    ),
+                    color = MaterialTheme.colorScheme.primary
                 )
                 if (!alarm.allowSnooze) {
-                    BadgePill(text = "Анти-Snooze", color = RadarEmerald)
+                    BadgePill(text = s.antiSnoozeBadge, color = MaterialTheme.colorScheme.secondary)
                 } else {
-                    BadgePill(text = "Penalty-Snooze", color = TacticalAmber)
+                    BadgePill(text = s.penaltySnoozeBadge, color = MaterialTheme.colorScheme.primary)
                 }
                 if (alarm.sunrisePreAlarmEnabled) {
-                    BadgePill(text = "Рассвет T−${alarm.sunriseLeadMinutes}м", color = TacticalAmber)
+                    BadgePill(
+                        text = s.sunriseBadge(alarm.sunriseLeadMinutes),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
                 if (alarm.antiReturnEnabled) {
-                    BadgePill(text = "Анти-возврат ${alarm.antiReturnDelayMinutes}м", color = RadarEmerald)
+                    BadgePill(
+                        text = s.antiReturnBadge(alarm.antiReturnDelayMinutes),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
                 }
             }
 
@@ -580,29 +634,31 @@ private fun AlarmCardItem(
             ) {
                 TextButton(
                     onClick = onTestNow,
-                    modifier = Modifier.testTag("test_alarm_${alarm.id}")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("test_alarm_${alarm.id}")
                 ) {
                     Icon(
                         Icons.Default.PlayArrow,
-                        contentDescription = "Проверить этот будильник",
+                        contentDescription = s.runTestBtn,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Запустить тест")
+                    Text(s.runTestBtn)
                 }
 
                 Row {
                     IconButton(onClick = onEdit, modifier = Modifier.testTag("edit_alarm_${alarm.id}")) {
                         Icon(
                             Icons.Default.Edit,
-                            contentDescription = "Редактировать будильник",
+                            contentDescription = "Edit",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.testTag("delete_alarm_${alarm.id}")) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "Удалить будильник",
+                            contentDescription = "Delete",
                             tint = AlertCrimson
                         )
                     }
@@ -615,7 +671,7 @@ private fun AlarmCardItem(
 @Composable
 private fun BadgePill(text: String, color: Color) {
     Surface(
-        color = color.copy(alpha = 0.16f),
+        color = color.copy(alpha = 0.14f),
         shape = RoundedCornerShape(6.dp),
         modifier = Modifier.border(0.8.dp, color.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
     ) {
@@ -637,9 +693,14 @@ fun AlarmEditorDialog(
     onDismiss: () -> Unit,
     onSave: (AlarmEntity) -> Unit
 ) {
+    val s = LocalAppStrings.current
     var hour by remember { mutableIntStateOf(initialAlarm?.hour ?: 7) }
     var minute by remember { mutableIntStateOf(initialAlarm?.minute ?: 0) }
-    var label by remember { mutableStateOf(initialAlarm?.label ?: "Утренний подъём") }
+    var label by remember {
+        mutableStateOf(
+            initialAlarm?.label ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний подъём"
+        )
+    }
 
     val selectedDays = remember {
         val initDays = initialAlarm?.daysOfWeek ?: setOf(1, 2, 3, 4, 5)
@@ -667,7 +728,8 @@ fun AlarmEditorDialog(
     }
     var voicePhrase by remember {
         mutableStateOf(
-            initialAlarm?.voicePhraseExpected ?: "Я полностью проснулся и готов к действию"
+            initialAlarm?.voicePhraseExpected
+                ?: if (s.isEnglish) "I am fully awake and ready for action" else "Я полностью проснулся и готов к действию"
         )
     }
     var allowSnooze by remember { mutableStateOf(initialAlarm?.allowSnooze ?: false) }
@@ -679,7 +741,7 @@ fun AlarmEditorDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (initialAlarm == null) "Новый тактический рубеж" else "Настройка будильника")
+            Text(if (initialAlarm == null) s.editorNewTitle else s.editorEditTitle)
         },
         text = {
             Column(
@@ -698,7 +760,7 @@ fun AlarmEditorDialog(
                         Text(
                             text = "%02d".format(hour),
                             style = MaterialTheme.typography.displayMedium,
-                            color = TacticalAmber
+                            color = MaterialTheme.colorScheme.primary
                         )
                         OutlinedButton(onClick = { hour = (hour + 23) % 24 }) { Text("−") }
                     }
@@ -712,7 +774,7 @@ fun AlarmEditorDialog(
                         Text(
                             text = "%02d".format(minute),
                             style = MaterialTheme.typography.displayMedium,
-                            color = TacticalAmber
+                            color = MaterialTheme.colorScheme.primary
                         )
                         OutlinedButton(onClick = { minute = (minute + 55) % 60 }) { Text("−5") }
                     }
@@ -721,69 +783,96 @@ fun AlarmEditorDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Название рубежа") },
+                    label = { Text(s.editorLabelField) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("alarm_label_input")
                 )
 
-                Text("Дни недели:", style = MaterialTheme.typography.labelLarge, color = TacticalAmber)
-                val dayLabels = listOf(1 to "Пн", 2 to "Вт", 3 to "Ср", 4 to "Чт", 5 to "Пт", 6 to "Сб", 7 to "Вс")
+                Text(
+                    s.editorDaysOfWeek,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    dayLabels.forEach { (isoDay, shortName) ->
+                    s.dayNamesShort.forEach { (isoDay, shortName) ->
                         val isSelected = isoDay in selectedDays
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(if (isSelected) TacticalAmber else ObsidianBg)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
                                 .clickable {
                                     if (isSelected) selectedDays.remove(isoDay) else selectedDays.add(isoDay)
                                 }
                         ) {
                             Text(
                                 text = shortName,
-                                color = if (isSelected) Color.Black else Color.White,
-                                style = MaterialTheme.typography.labelSmall
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                Text("Профиль эскалации:", style = MaterialTheme.typography.labelLarge, color = TacticalAmber)
+                Text(
+                    s.editorEscalationProfile,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 EscalationProfile.entries.forEach { item ->
+                    val selected = profile == item
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (profile == item) SlateSurfaceVariant else ObsidianBg)
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
                             .clickable { profile = item }
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(item.titleRu, fontWeight = FontWeight.Bold)
-                            Text(item.subtitleRu, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = item.localizedTitle(s.isEnglish),
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = item.localizedSubtitle(s.isEnglish),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
 
                 Text(
-                    "Цепочка миссий (выберите 1–5 по порядку):",
+                    s.editorMissionChain,
                     style = MaterialTheme.typography.labelLarge,
-                    color = TacticalAmber
+                    color = MaterialTheme.colorScheme.primary
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MissionType.entries.forEach { mType ->
                         val idx = selectedMissions.indexOf(mType)
                         val selected = idx >= 0
+                        val title = mType.localizedTitle(s.isEnglish)
                         FilterChip(
                             selected = selected,
                             onClick = {
@@ -794,27 +883,27 @@ fun AlarmEditorDialog(
                                 }
                             },
                             label = {
-                                Text(if (selected) "${idx + 1}. ${mType.titleRu}" else mType.titleRu)
+                                Text(if (selected) "${idx + 1}. $title" else title)
                             }
                         )
                     }
                 }
 
                 if (MissionType.MATH in selectedMissions) {
-                    Text("Сложность математики:", style = MaterialTheme.typography.labelSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(s.editorMathDifficulty, style = MaterialTheme.typography.labelSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         MathDifficulty.entries.forEach { diff ->
                             FilterChip(
                                 selected = mathDifficulty == diff,
                                 onClick = { mathDifficulty = diff },
-                                label = { Text(diff.name) }
+                                label = { Text(diff.localizedLabel(s.isEnglish)) }
                             )
                         }
                     }
                 }
 
                 if (MissionType.STEPS in selectedMissions) {
-                    Text("Целевое число шагов: $targetSteps", style = MaterialTheme.typography.labelSmall)
+                    Text(s.editorTargetSteps(targetSteps), style = MaterialTheme.typography.labelSmall)
                     Slider(
                         value = targetSteps.toFloat(),
                         onValueChange = { targetSteps = it.toInt() },
@@ -827,7 +916,7 @@ fun AlarmEditorDialog(
                     OutlinedTextField(
                         value = qrPayload,
                         onValueChange = { qrPayload = it },
-                        label = { Text("Ожидаемый QR-код в ванной") },
+                        label = { Text(s.editorExpectedQr) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -837,7 +926,7 @@ fun AlarmEditorDialog(
                     OutlinedTextField(
                         value = nfcTagId,
                         onValueChange = { nfcTagId = it },
-                        label = { Text("NFC Tag ID (* = любая метка)") },
+                        label = { Text(s.editorExpectedNfc) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -847,7 +936,7 @@ fun AlarmEditorDialog(
                     OutlinedTextField(
                         value = voicePhrase,
                         onValueChange = { voicePhrase = it },
-                        label = { Text("Контрольная голосовая фраза") },
+                        label = { Text(s.editorExpectedVoice) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -858,7 +947,8 @@ fun AlarmEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Разрешить штрафной Snooze (+5 мин)", modifier = Modifier.weight(1f))
+                    Text(s.editorAllowPenaltySnooze, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(checked = allowSnooze, onCheckedChange = { allowSnooze = it })
                 }
 
@@ -867,7 +957,8 @@ fun AlarmEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Фаза «Рассвет» за T−15 мин", modifier = Modifier.weight(1f))
+                    Text(s.editorSunrisePreAlarm, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(checked = sunriseEnabled, onCheckedChange = { sunriseEnabled = it })
                 }
 
@@ -876,7 +967,8 @@ fun AlarmEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Контроль «Анти-возврат в кровать» (5 мин)", modifier = Modifier.weight(1f))
+                    Text(s.editorAntiReturn, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(checked = antiReturnEnabled, onCheckedChange = { antiReturnEnabled = it })
                 }
 
@@ -885,7 +977,8 @@ fun AlarmEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Резерв: Webhook умного дома и контакт", modifier = Modifier.weight(1f))
+                    Text(s.editorBackupChannels, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(
                         checked = backupWebhookEnabled && backupContactEnabled,
                         onCheckedChange = {
@@ -902,7 +995,7 @@ fun AlarmEditorDialog(
                     val entity = (initialAlarm ?: AlarmEntity(hour = hour, minute = minute, label = label)).copy(
                         hour = hour,
                         minute = minute,
-                        label = label.ifBlank { "Боевой рубеж" },
+                        label = label.ifBlank { if (s.isEnglish) "Tactical Alarm" else "Боевой рубеж" },
                         daysOfWeekCsv = selectedDays.sorted().joinToString(","),
                         enabled = true,
                         escalationProfile = profile.name,
@@ -920,14 +1013,19 @@ fun AlarmEditorDialog(
                     )
                     onSave(entity)
                 },
-                modifier = Modifier.testTag("save_alarm_button")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("save_alarm_button")
             ) {
-                Text("Сохранить рубеж")
+                Text(s.saveAlarmBtn)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.heightIn(min = 48.dp)
+            ) {
+                Text(s.cancelBtn)
             }
         }
     )

@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">Alarm Commander</string>
+
+    <!-- Navigation (short labels so they never wrap in NavigationBar) -->
+    <string name="nav_command_center">HQ</string>
+    <string name="nav_permissions">Guard</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_settings">Config</string>
+
+    <!-- Disclaimer & Safety -->
+    <string name="disclaimer_title">Important Safety Notice</string>
+    <string name="disclaimer_body">Alarm Commander is a multi-layered risk-reduction system against oversleeping, NOT a medical or life-support device. It cannot guarantee 100% wake-up under hardware failure, depleted battery, or forced OS termination. Dangerous methods (strobes &gt;2 Hz, extreme frequencies, covert recording, or unauthorized data transmission) are strictly prohibited.</string>
+    <string name="disclaimer_accept">I Understand &amp; Accept</string>
+    <string name="disclaimer_banner_short">Multi-layered anti-oversleep system • 100% local storage, zero telemetry</string>
+
+    <!-- Command Center -->
+    <string name="header_subtitle">TACTICAL WAKE-UP CONTROL</string>
+    <string name="btn_new_alarm">New Alarm</string>
+    <string name="btn_test_alarm">Test T0</string>
+    <string name="btn_test_sunrise">Sunrise T−15</string>
+    <string name="empty_alarms_title">No Active Alarms</string>
+    <string name="empty_alarms_Hint">Create your first multi-layered alarm or run an instant combat test above.</string>
+
+    <!-- Escalation Profiles -->
+    <string name="profile_gentle">Gentle (Soft Start)</string>
+    <string name="profile_hard">Hard (Enhanced)</string>
+    <string name="profile_extreme_safe">ExtremeSafe (Max Safe)</string>
+
+    <!-- Missions -->
+    <string name="mission_math">Math</string>
+    <string name="mission_steps">Step Counter (50–100)</string>
+    <string name="mission_qr">Bathroom QR Code</string>
+    <string name="mission_nfc">NFC Tag</string>
+
+    <!-- Active Alarm Screen -->
+    <string name="alarm_ringing_badge">COMBAT ALARM • AUTOPILOT LOCKED</string>
+    <string name="alarm_sunrise_badge">PRE-ALARM SUNRISE (T−15 MIN)</string>
+    <string name="btn_start_mission">START DISMISSAL MISSION</string>
+    <string name="btn_penalty_snooze">Penalty Snooze (+5 min after phrase)</string>
+    <string name="anti_snooze_locked">Anti-Snooze active: dismissal only via mission chain</string>
+    <string name="anti_return_banner_title">ANTI-RETURN TO BED CHECK</string>
+    <string name="anti_return_confirm_btn">I AM AWAKE • CONFIRM OUT OF BED</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_alarm_name">Alarm Commander Critical Alarm</string>
+    <string name="notif_channel_alarm_desc">Full-screen alarm signal with volume escalation</string>
+    <string name="notif_channel_backup_name">Anti-Return &amp; Backup Alerts</string>
+    <string name="notif_channel_backup_desc">Post-dismissal wakefulness check and backup channels</string>
+</resources>

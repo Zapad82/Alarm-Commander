@@ -28,6 +28,10 @@ data class CommanderSettingsState(
     val bypassDndPreferred: Boolean = true,
     val defaultQrPayload: String = "ALARM-COMMANDER-BATHROOM-01",
     val defaultNfcTagId: String = "*",
+    // Язык ("SYSTEM", "RU", "EN") и тема ("DARK", "LIGHT", "SYSTEM") + репозиторий обновлений GitHub
+    val languageMode: String = "SYSTEM",
+    val themeMode: String = "DARK",
+    val githubRepoSlug: String = "alarm-commander/alarm-commander-android",
     // Поля сохранения активной сессии для восстановления после убийства процесса (process death)
     val activeAlarmId: Long = -1L,
     val activeAlarmState: AlarmState = AlarmState.DISMISSED,
@@ -49,6 +53,9 @@ class SettingsRepository(private val context: Context) {
         val BYPASS_DND_PREFERRED = booleanPreferencesKey("bypass_dnd_preferred")
         val DEFAULT_QR_PAYLOAD = stringPreferencesKey("default_qr_payload")
         val DEFAULT_NFC_TAG_ID = stringPreferencesKey("default_nfc_tag_id")
+        val LANGUAGE_MODE = stringPreferencesKey("language_mode")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val GITHUB_REPO_SLUG = stringPreferencesKey("github_repo_slug")
 
         // Process-death recovery keys
         val ACTIVE_ALARM_ID = longPreferencesKey("active_alarm_id")
@@ -74,6 +81,9 @@ class SettingsRepository(private val context: Context) {
             bypassDndPreferred = prefs[Keys.BYPASS_DND_PREFERRED] ?: true,
             defaultQrPayload = prefs[Keys.DEFAULT_QR_PAYLOAD] ?: "ALARM-COMMANDER-BATHROOM-01",
             defaultNfcTagId = prefs[Keys.DEFAULT_NFC_TAG_ID] ?: "*",
+            languageMode = prefs[Keys.LANGUAGE_MODE] ?: "SYSTEM",
+            themeMode = prefs[Keys.THEME_MODE] ?: "DARK",
+            githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "alarm-commander/alarm-commander-android",
             activeAlarmId = prefs[Keys.ACTIVE_ALARM_ID] ?: -1L,
             activeAlarmState = parsedState,
             activeEscalationStage = prefs[Keys.ACTIVE_ESCALATION_STAGE] ?: 0,
@@ -88,6 +98,20 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDisclaimerAccepted(accepted: Boolean) {
         context.dataStore.edit { it[Keys.DISCLAIMER_ACCEPTED] = accepted }
+    }
+
+    suspend fun setLanguageMode(mode: String) {
+        context.dataStore.edit { it[Keys.LANGUAGE_MODE] = mode }
+    }
+
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { it[Keys.THEME_MODE] = mode }
+    }
+
+    suspend fun setGithubRepoSlug(slug: String) {
+        context.dataStore.edit {
+            it[Keys.GITHUB_REPO_SLUG] = slug.trim().ifEmpty { "alarm-commander/alarm-commander-android" }
+        }
     }
 
     suspend fun updateBackupSettings(

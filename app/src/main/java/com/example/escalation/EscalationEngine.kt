@@ -15,9 +15,11 @@ data class EscalationSnapshot(
     val volumePercent: Int,
     val vibrationCadenceLevel: Int, // 0..3
     val dualToneActive: Boolean,
-    val safeScreenPulseActive: Boolean, // Плавная смена фона ≤ 1 Гц (без стробоскопа!)
+    val safeScreenPulseActive: Boolean, // Плавная смена фона ≤ 0.71 Гц (без стробоскопа!)
     val missionAttenuated: Boolean,
     val overdueTriggered: Boolean,
+    val batterySafetyCutoffReached: Boolean = false,
+    val ecoModeActive: Boolean = false,
     val statusDescriptionRu: String
 )
 
@@ -28,7 +30,8 @@ data class EscalationSnapshot(
  * - Расчёт уровня громкости, вибрации и второго тона по времени.
  * - Временное приглушение звука (attenuation до 25%) во время активного ввода миссии.
  * - Автоматический возврат на полную мощность, если пользователь бросил телефон во время миссии.
- * - Переход в состояние OVERDUE с вызовом резервных каналов.
+ * - Энергосберегающий Eco-профиль при низком заряде батареи (≤ 15%) и жёсткий предохранитель
+ *   авто-отключения через 10 минут (600 сек) для предотвращения полного разряда и перегрева.
  */
 class EscalationEngine {
 
@@ -43,12 +46,14 @@ class EscalationEngine {
         /** Время (в секундах), на которое звук приглушается при активном вводе миссии */
         const val MISSION_ATTENUATION_WINDOW_SEC = 25
         const val ATTENUATED_VOLUME_PERCENT = 25
+
+        /** Жёсткий лимит непрерывного звучания (10 минут) для защиты батареи и динамика */
+        const val MAX_ALARM_RING_DURATION_SEC = 600
+
+        /** Сокращённый лимит (5 минут) при критически низком заряде батареи (≤ 15%) */
+        const val LOW_BATTERY_MAX_RING_DURATION_SEC = 300
     }
 
-    /**
-     * Защита от повторного/двойного запуска:
-     * возвращает false, если этот же будильник уже звенит или проходит миссию.
-     */
     @Synchronized
     fun startSession(
         alarmId: Long,
@@ -129,31 +134,41 @@ class EscalationEngine {
     fun getCurrentState(): AlarmState = currentState
 
     /**
-     * Вычисляет текущее состояние эскалации по прошедшему времени.
-     * Детерминированный метод (удобен для unit-тестирования).
+     * Вычисляет текущее состояние эскалации по прошедшему времени и статусу батареи.
      */
     @Synchronized
-    fun evaluateTick(nowEpochMs: Long = System.currentTimeMillis()): EscalationSnapshot {
+    fun evaluateTick(
+        nowEpochMs: Long = System.currentTimeMillis(),
+        lowBatteryEcoMode: Boolean = false
+    ): EscalationSnapshot {
         val id = activeAlarmId ?: -1L
+        val elapsedSec = ((nowEpochMs - startEpochMs).coerceAtLeast(0L) / 1000L).toInt()
+        val maxDurationSec = if (lowBatteryEcoMode) {
+            LOW_BATTERY_MAX_RING_DURATION_SEC
+        } else {
+            MAX_ALARM_RING_DURATION_SEC
+        }
+        val cutoffReached = elapsedSec >= maxDurationSec
+
         if (currentState == AlarmState.PRE_ALARM_SUNRISE) {
-            val elapsed = ((nowEpochMs - startEpochMs).coerceAtLeast(0L) / 1000L).toInt()
             return EscalationSnapshot(
                 alarmId = id,
                 state = AlarmState.PRE_ALARM_SUNRISE,
                 profile = activeProfile,
                 stage = 0,
-                elapsedSeconds = elapsed,
+                elapsedSeconds = elapsedSec,
                 volumePercent = 10,
                 vibrationCadenceLevel = 0,
                 dualToneActive = false,
                 safeScreenPulseActive = false,
                 missionAttenuated = false,
                 overdueTriggered = false,
+                batterySafetyCutoffReached = cutoffReached,
+                ecoModeActive = lowBatteryEcoMode,
                 statusDescriptionRu = "Фаза «Рассвет» (T−15): мягкая подсветка экрана и webhook умной лампы"
             )
         }
 
-        val elapsedSec = ((nowEpochMs - startEpochMs).coerceAtLeast(0L) / 1000L).toInt()
         val secSinceInteraction = if (lastMissionInteractionEpochMs > 0L) {
             ((nowEpochMs - lastMissionInteractionEpochMs).coerceAtLeast(0L) / 1000L).toInt()
         } else {
@@ -163,8 +178,6 @@ class EscalationEngine {
         val isMissionActiveRecently = currentState == AlarmState.MISSION_IN_PROGRESS &&
             secSinceInteraction <= MISSION_ATTENUATION_WINDOW_SEC
 
-        // Если пользователь начал миссию, но бездействует дольше MISSION_ATTENUATION_WINDOW_SEC —
-        // возвращаем состояние ESCALATING и полную громкость
         if (currentState == AlarmState.MISSION_IN_PROGRESS && !isMissionActiveRecently) {
             currentState = AlarmState.ESCALATING
         }
@@ -204,14 +217,22 @@ class EscalationEngine {
             rawVolume
         }
 
-        val vibrationLevel = when {
-            isMissionActiveRecently -> 0
+        val rawVibrationLevel = when {
+            isMissionActiveRecently || cutoffReached -> 0
             stage >= 3 -> 3
             stage == 2 -> 2
             else -> 1
         }
+        // В Eco-режиме ограничиваем мощность вибромотора уровнем 1 для экономии заряда
+        val vibrationLevel = if (lowBatteryEcoMode) {
+            rawVibrationLevel.coerceAtMost(1)
+        } else {
+            rawVibrationLevel
+        }
 
         val statusDesc = when {
+            cutoffReached ->
+                "Защита батареи: достигнут лимит непрерывного сигнала (${maxDurationSec / 60} мин). Звук переведён в ждущий режим."
             isMissionActiveRecently ->
                 "Миссия активна: сигнал временно приглушён (${MISSION_ATTENUATION_WINDOW_SEC - secSinceInteraction}с до возврата мощности)"
             stage == 4 ->
@@ -230,12 +251,14 @@ class EscalationEngine {
             profile = activeProfile,
             stage = stage,
             elapsedSeconds = elapsedSec,
-            volumePercent = effectiveVolume,
+            volumePercent = if (cutoffReached) 0 else effectiveVolume,
             vibrationCadenceLevel = vibrationLevel,
-            dualToneActive = stage >= 2 && !isMissionActiveRecently,
-            safeScreenPulseActive = stage >= 3 && !isMissionActiveRecently,
+            dualToneActive = stage >= 2 && !isMissionActiveRecently && !cutoffReached,
+            safeScreenPulseActive = stage >= 3 && !isMissionActiveRecently && !lowBatteryEcoMode && !cutoffReached,
             missionAttenuated = isMissionActiveRecently,
             overdueTriggered = isOverdue,
+            batterySafetyCutoffReached = cutoffReached,
+            ecoModeActive = lowBatteryEcoMode,
             statusDescriptionRu = statusDesc
         )
     }

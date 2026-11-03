@@ -3,6 +3,8 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.permissions.PermissionManager
+import com.example.permissions.SafetyAndPowerAuditor
+import com.example.settings.CommanderSettingsState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,13 +17,21 @@ import org.robolectric.annotation.Config
 class ExampleRobolectricTest {
 
     @Test
-    fun `read app name and evaluate permission checklist from context`() {
+    fun `read app name, evaluate permission checklist and pass safety-power audit`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
         assertEquals("Alarm Commander", appName)
 
         val permissionManager = PermissionManager(context)
         val checklist = permissionManager.evaluateAllPermissions()
-        assertTrue("Чек-лист разрешений должен содержать все 9 пунктов", checklist.size == 9)
+        assertEquals("Чек-лист разрешений должен содержать все 9 пунктов", 9, checklist.size)
+
+        val auditor = SafetyAndPowerAuditor(context)
+        val report = auditor.runFullAudit(CommanderSettingsState())
+        assertEquals(6, report.checks.size)
+        assertTrue(
+            "Все 6 проверок безопасности и энергоэффективности должны проходить успешно со штатными настройками",
+            report.checks.all { it.passed }
+        )
     }
 }

@@ -3,7 +3,6 @@ package com.example.alarm
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Build
 import android.os.VibrationEffect
@@ -20,9 +19,10 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Контроллер многослойного звука и тактической вибрации будильника.
- * Генерирует синтезированный сигнал через AudioTrack на канале USAGE_ALARM,
- * плавно повышает громкость по стадиям EscalationEngine и подключает второй генератор тона.
+ * Энергоэффективный контроллер многослойного звука и тактической вибрации будильника.
+ * Оптимизации энергопотребления:
+ * - Во время пауз скважности (!playPulse) не гоняет пустые буферы в AudioTrack, а уходит в suspend delay.
+ * - Не вызывает IPC-метод vibrator.cancel() на каждом тике, если вибрация уже остановлена.
  */
 class AlarmAudioController(private val context: Context) {
 
@@ -41,6 +41,9 @@ class AlarmAudioController(private val context: Context) {
     @Volatile
     private var vibrationLevel: Int = 1
 
+    @Volatile
+    private var wasVibrating: Boolean = false
+
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -57,6 +60,11 @@ class AlarmAudioController(private val context: Context) {
         dualTone: Boolean,
         vibrationCadenceLevel: Int
     ) {
+        if (volumePercent <= 0 && vibrationCadenceLevel <= 0) {
+            stopAll()
+            return
+        }
+
         currentStage = stage
         targetVolumePercent = volumePercent.coerceIn(5, 100)
         dualToneEnabled = dualTone
@@ -102,26 +110,26 @@ class AlarmAudioController(private val context: Context) {
 
             try {
                 while (isActive) {
-                    val volScalar = (targetVolumePercent / 100.0).coerceIn(0.05, 1.0)
-                    val baseFreq = when (currentStage) {
-                        0 -> 432.0 // Мягкий тон рассвета
-                        1 -> 528.0 // Уровень 1
-                        2 -> 740.0 // Уровень 2
-                        else -> if (tickCounter % 4 < 2) 880.0 else 1174.6 // Уровень 3-4: двухчастотная сирена
-                    }
-                    val secondFreq = if (dualToneEnabled) baseFreq * 1.498 else 0.0
-
-                    // Скважность сигнала (паузы между импульсами на ранних стадиях)
                     val playPulse = when (currentStage) {
                         0 -> tickCounter % 6 == 0
                         1 -> tickCounter % 3 != 2
                         else -> true
                     }
 
-                    for (i in 0 until chunkSamples) {
-                        if (!playPulse) {
-                            pcmBuffer[i] = 0
-                        } else {
+                    if (!playPulse) {
+                        // Экономия CPU во время паузы между импульсами на ранних стадиях
+                        delay(190L)
+                    } else {
+                        val volScalar = (targetVolumePercent / 100.0).coerceIn(0.05, 1.0)
+                        val baseFreq = when (currentStage) {
+                            0 -> 432.0
+                            1 -> 528.0
+                            2 -> 740.0
+                            else -> if (tickCounter % 4 < 2) 880.0 else 1174.6
+                        }
+                        val secondFreq = if (dualToneEnabled) baseFreq * 1.498 else 0.0
+
+                        for (i in 0 until chunkSamples) {
                             phase1 += (2.0 * PI * baseFreq) / sampleRate
                             val s1 = sin(phase1)
                             val s2 = if (secondFreq > 0.0) {
@@ -135,10 +143,10 @@ class AlarmAudioController(private val context: Context) {
                                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                                 .toShort()
                         }
-                    }
 
-                    runCatching {
-                        audioTrack?.write(pcmBuffer, 0, chunkSamples)
+                        runCatching {
+                            audioTrack?.write(pcmBuffer, 0, chunkSamples)
+                        }
                     }
 
                     if (tickCounter % 5 == 0) {
@@ -153,7 +161,10 @@ class AlarmAudioController(private val context: Context) {
                     audioTrack?.stop()
                     audioTrack?.release()
                 }
-                runCatching { vibrator?.cancel() }
+                if (wasVibrating) {
+                    runCatching { vibrator?.cancel() }
+                    wasVibrating = false
+                }
             }
         }
     }
@@ -161,17 +172,21 @@ class AlarmAudioController(private val context: Context) {
     private fun triggerVibrationPulse(level: Int) {
         val vib = vibrator ?: return
         if (!vib.hasVibrator() || level <= 0) {
-            runCatching { vib.cancel() }
+            if (wasVibrating) {
+                runCatching { vib.cancel() }
+                wasVibrating = false
+            }
             return
         }
+        wasVibrating = true
         val durationMs = when (level) {
-            1 -> 220L
-            2 -> 450L
-            else -> 750L
+            1 -> 200L
+            2 -> 420L
+            else -> 700L
         }
         val amplitude = when (level) {
             1 -> 110
-            2 -> 190
+            2 -> 185
             else -> 255
         }
         runCatching {
@@ -187,6 +202,9 @@ class AlarmAudioController(private val context: Context) {
     fun stopAll() {
         synthJob?.cancel()
         synthJob = null
-        runCatching { vibrator?.cancel() }
+        if (wasVibrating) {
+            runCatching { vibrator?.cancel() }
+            wasVibrating = false
+        }
     }
 }
