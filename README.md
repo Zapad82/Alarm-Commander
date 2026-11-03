@@ -1,195 +1,116 @@
 # Alarm Commander — Многослойный тактический будильник / Multi-Layered Tactical Wake-Up System (Android)
 
-> **[RU]** Боевой Android-будильник (Kotlin + Jetpack Compose + Material 3), исключающий выключение на автопилоте за счёт 4-ступенчатой эскалации сигнала, цепочек физических и когнитивных миссий, контроля «Анти-возврат в кровать» и локальных резервных каналов.  
-> **[EN]** Production-ready tactical Android alarm system (Kotlin + Jetpack Compose + Material 3) that prevents dismissing alarms on autopilot through 4-stage acoustic/haptic escalation, physical & cognitive mission chains, Anti-Return-to-Bed verification, and local backup channels.
+> **[RU]** Надёжный Android-будильник с открытым исходным кодом (Kotlin + Jetpack Compose + Material 3), который не даёт выключить себя «на автопилоте» во сне. Использует 4-ступенчатую эскалацию сигнала, цепочки физических и когнитивных миссий, контроль «Анти-возврат в кровать» и локальные резервные каналы. Без рекламы, аналитики и облачной слежки.  
+> **[EN]** Open-source tactical Android alarm application (Kotlin + Jetpack Compose + Material 3) designed to prevent unconscious dismissal on autopilot. Features 4-stage sound & vibration escalation, physical & cognitive mission chains, Anti-Return-to-Bed verification, and local smart-home/contact backup channels. 100% local, ad-free, and zero telemetry.
 
 ---
 
-## 🇷🇺 ОПИСАНИЕ ПРОЕКТА (РУССКИЙ)
+## 🇷🇺 О ПРИЛОЖЕНИИ (РУССКИЙ)
 
-### 1. Продуктовая концепция и ключевые возможности
-**Alarm Commander** спроектирован для людей, которые выключают обычные будильники во сне («на автопилоте») или возвращаются в кровать сразу после сигнала:
-- **Фаза «Рассвет» (`T−15 мин`)**: мягкий световой градиент экрана и локальный HTTP/HTTPS Webhook на умную лампу (Home Assistant / MQTT-шлюз) за 15 минут до основного подъёма.
-- **Точное пробуждение в `T0` (`AlarmManager.setAlarmClock`)**: гарантированный выход процессора из режима глубокого сна Doze, запуск `ForegroundService` (`specialUse`), `PARTIAL_WAKE_LOCK` с жёстким предохранителем 10 минут и полноэкранный вызов (`USE_FULL_SCREEN_INTENT`) поверх экрана блокировки.
-- **3 профиля 4-ступенчатой эскалации (`Gentle`, `Hard`, `ExtremeSafe`)**:
-  - Нарастание громкости в потоке `USAGE_ALARM`, уплотнение вибро-паттерна и двухтональная сирена на пиковой стадии.
-  - Во время выполнения миссии громкость автоматически приглушается до **25%** (Acoustic Safety), чтобы вы могли спокойно решить задачу, но мгновенно возвращается к **100%**, если миссия заброшена.
-- **Цепочка миссий (1–5 задач подряд для отключения)**:
-  1. **Математика (`MATH`)**: арифметические уравнения (`EASY` / `MEDIUM` / `HARD`) со встроенным крупным тактическим Numpad на экране блокировки.
-  2. **Шагомер (`STEPS`)**: 20–100 физических шагов через аппаратный `TYPE_STEP_COUNTER` (или фильтр пиков акселерометра `TYPE_ACCELEROMETER`).
-  3. **QR-код в ванной (`QR`)**: потоковое сканирование CameraX + ZXing `MultiFormatReader` в памяти (`ImageProxy` закрывается в `finally` без сохранения фото на диск) + встроенный генератор QR-кода для печати.
-  4. **NFC-метка (`NFC`)**: чтение аппаратного `NfcAdapter.enableReaderMode` только в окне активной NFC-миссии + когнитивный резервный код, если модуль NFC недоступен.
-  5. **Голосовая фраза (`VOICE`)**: проверка произнесения контрольной фразы вслух через `SpeechRecognizer` (сходство по Левенштейну ≥ 65%).
-- **Анти-Snooze и Penalty-Snooze**: перенос сигнала по умолчанию заблокирован (`BackHandler` перехватывает жест «Назад»); если штрафной Snooze разрешён в настройках рубежа, для отсрочки на 5 минут требуется безошибочно набрать длинную контрольную фразу.
-- **Контроль «Анти-возврат в кровать»**: через 5 минут после успешного закрытия миссий запускается 60-секундная проверка бодрствования. Если не нажать кнопку подтверждения — будильник перезапускает полную боевую тревогу `T0`.
-- **Резервные каналы (`BackupChannel`)**:
-  - Локальный `SmartHomeWebhookChannel` (защита от утечек в открытый HTTP: разрешены только `https://` или локальные подсети RFC-1918 `192.168.x.x` / `10.x.x.x` / `.local`, экранирование JSON по RFC-8259).
-  - `SocialContactChannel` (экстренное уведомление с быстрым запуском SMS `smsto:` или вызова `tel:` дежурному контакту).
-  - Архитектурные контракты-заглушки (`Stubs`) для Post-MVP: `SecondDeviceStubChannel`, `SmartSpeakerStubChannel`, `BedShakerStubChannel`, `FriendVoipCallStubChannel`.
-- **Двуязычный интерфейс (`RU` / `EN` / `Авто`) и Темы (`Тёмная` / `Светлая` / `Системная`)**: мгновенное переключение прямо из верхней панели или вкладки **Опции**.
-- **100% локально**: Room SQLite + Jetpack DataStore, без рекламы, аналитики и платных SDK.
+### Зачем нужен Alarm Commander?
+Обычные будильники легко выключить одним смахиванием, не просыпаясь до конца, или отложить кнопкой Snooze и снова уснуть. **Alarm Commander** решает эту проблему комплексно: чтобы отключить сигнал, необходимо физически встать с кровати и пройти заданную цепочку проверок, а спустя несколько минут — подтвердить, что вы не легли обратно.
 
----
-
-### 2. Подпись собственным сертификатом и обновление поверх старой версии (GitHub Releases)
-
-Чтобы **Google Play Защита (Play Protect)** и антивирусы доверяли вашему APK, а новые версии устанавливались **поверх старых без удаления приложения и без потери будильников/настроек**, соблюдайте 3 правила Android:
-1. **Неизменный `applicationId`**: в `app/build.gradle.kts` зафиксирован `com.aistudio.alarmcommander.tqxk`.
-2. **Единый сертификат подписи (`.jks`)**: каждая новая сборка должна быть подписана **тем же самым** файлом ключа `my-upload-key.jks`. Android сверяет SHA-256 отпечаток сертификата (его можно увидеть прямо в приложении на вкладке **Опции → Обновление через GitHub и Подпись APK**).
-3. **Монотонное увеличение `versionCode`**: при каждом новом релизе в `app/build.gradle.kts` увеличивайте `versionCode` (например, `1` → `2` → `3`) и `versionName` (`"1.0"` → `"1.1"`).
-
-#### Шаг 1. Создание собственного ключа подписи (`my-upload-key.jks`)
-Выполните один раз на своём компьютере (требуется JDK `keytool`):
-```bash
-keytool -genkeypair -v \
-  -keystore my-upload-key.jks \
-  -alias upload \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -dname "CN=Alarm Commander, OU=Mobile Security, O=AlarmCommander, L=Limassol, S=Limassol, C=CY"
-```
-> Сохраните `my-upload-key.jks` в надёжном месте и **никогда не коммитьте его в публичный Git-репозиторий**.
-
-#### Шаг 2. Локальная сборка подписанного Release APK
-Конфигурация `signingConfigs.getByName("release")` в `app/build.gradle.kts` уже настроена на чтение переменных окружения:
-```bash
-export KEYSTORE_PATH="/полный/путь/к/my-upload-key.jks"
-export STORE_PASSWORD="ваш_пароль_хранилища"
-export KEY_PASSWORD="ваш_пароль_ключа"
-
-./gradlew assembleRelease
-```
-Готовый подписанный APK появится в `app/build/outputs/apk/release/app-release.apk`.
-
-#### Шаг 3. Публикация и способы обновления через GitHub Releases
-1. **Через интерфейс приложения (рекомендуется, 100% совместимо с Google Play Protect)**:
-   - Загрузите подписанный `app-release.apk` в раздел **Releases** вашего репозитория на GitHub (например, тег `v1.1`).
-   - В приложении откройте вкладку **Опции (`Config`) → Обновление через GitHub и Подпись APK**.
-   - Укажите ваш репозиторий `owner/repo` и нажмите **«Проверить наличие новой версии на GitHub»**.
-   - Если найдена более свежая версия, нажмите **«Открыть страницу релизов GitHub / Скачать APK»** — системный браузер скачает подписанный тем же ключом APK и установит его **поверх текущей версии** с сохранением всех будильников и журнала Room.
-2. **Через GitHub Actions (автоматический выпуск подписанных APK при создании git-тега)**:
-   - Добавьте в `Settings → Secrets and variables → Actions` вашего GitHub-репозитория секреты:
-     - `KEYSTORE_BASE64` (вывод команды `base64 -w 0 my-upload-key.jks`)
-     - `STORE_PASSWORD`
-     - `KEY_PASSWORD`
-   - При пуше тега `git tag v1.1 && git push origin v1.1` GitHub Actions декодирует `my-upload-key.jks`, соберёт `assembleRelease` и автоматически прикрепит `alarm-commander-v1.1.apk` к GitHub Release.
-3. **Через ADB при разработке**:
-   ```bash
-   adb install -r app/build/outputs/apk/release/app-release.apk
-   ```
-   Флаг `-r` (`replace`) обновляет приложение поверх старого с сохранением БД Room и DataStore.
-
-> **Обязательный дисклеймер безопасности**: Приложение является вспомогательным инструментом дисциплины пробуждения, **не гарантирует пробуждение на 100%** и **не является медицинским устройством**. В приложении строго запрещены опасные методы (стробоскопы > 3 Гц, скрытая запись, вредоносные практики).
+### Как работает система пробуждения по шагам
+1. **Фаза «Рассвет» (`T−15 минут`)**:
+   - За 15 минут до основного сигнала экран смартфона плавно включает тёплое янтарное свечение, а при наличии умного дома отправляется локальный запрос (Webhook) на включение умной лампы в спальне.
+   - Если вы проснулись раньше — фазу рассвета можно завершить одной кнопкой.
+2. **Точный сигнал в `T0` (`AlarmManager.setAlarmClock`)**:
+   - Будильник выводит смартфон из глубокого сна (Doze Mode), включает полноэкранный режим поверх блокировки экрана и блокирует системную кнопку/жест «Назад».
+3. **4-ступенчатая эскалация звука и вибрации**:
+   - Доступны 3 профиля: **Gentle** (плавный старт), **Hard** (тактический) и **ExtremeSafe** (быстрый выход на максимум).
+   - Если нет реакции в течение 20–45 секунд, громкость пошагово растёт до 100%, уплотняется ритм вибрации и подключается двухтональная сирена.
+   - **Комфорт во время миссии**: как только вы начинаете выполнять миссию, звук автоматически приглушается до **25%**, чтобы не мешать считать или сканировать код. Если перестать выполнять задание на 30 секунд — полная громкость вернётся.
+4. **Цепочка миссий для отключения (от 1 до 5 заданий подряд)**:
+   - **Математика (`MATH`)**: решение от 3 до 5 арифметических примеров (3 уровня сложности) на встроенной крупной цифровой клавиатуре.
+   - **Шагомер (`STEPS`)**: необходимо пройти от 20 до 100 реальных шагов по квартире (используется аппаратный датчик шагов смартфона).
+   - **QR-код в ванной (`QR`)**: сканирование камерой распечатанного QR-кода, размещённого в ванной или на кухне.
+   - **NFC-метка (`NFC`)**: касание смартфоном NFC-метки в другой комнате.
+   - **Голосовая фраза (`VOICE`)**: произнесение вслух контрольной фразы пробуждения.
+5. **Анти-Snooze и штрафной перенос (Penalty-Snooze)**:
+   - По умолчанию кнопка «Отложить» полностью отключена.
+   - Если в настройках будильника включён «Штрафной Snooze», для отсрочки на 5 минут потребуется без единой ошибки ввести с клавиатуры длинную контрольную фразу.
+6. **Контроль «Анти-возврат в кровать»**:
+   - Через 5 минут после отключения будильника запускается 60-секундное окно проверки бодрствования. Если не подтвердить, что вы на ногах — боевая тревога и цепочка миссий запустятся заново.
+7. **Резервные каналы при просрочке (Overdue)**:
+   - Если будильник не выключен за отведённое время, приложение может автоматически вызвать локальный Webhook умного дома (например, включить верхний свет через Home Assistant) и вывести экстренное уведомление для связи с резервным контактом.
 
 ---
 
-## 🇬🇧 PROJECT DOCUMENTATION (ENGLISH)
+### Установка и настройка (RU)
 
-### 1. Product Overview & Core Capabilities
-**Alarm Commander** is a multi-layered tactical Android alarm app designed for heavy sleepers who unconsciously dismiss standard alarms on autopilot or fall back asleep right after turning them off:
-- **Sunrise Pre-Alarm (`T−15 min`)**: Gentle warm screen illumination and a local Smart Home Webhook trigger (Home Assistant / MQTT bridge) 15 minutes before `T0`.
-- **Exact Wake-Up at `T0` (`AlarmManager.setAlarmClock`)**: Wakes the device from deep Doze mode, launches a high-priority `ForegroundService` (`specialUse`), acquires a non-reference-counted `PARTIAL_WAKE_LOCK` with a hard 10-minute safety cap, and presents the combat alarm UI over the lockscreen via `USE_FULL_SCREEN_INTENT`.
-- **3 Escalation Profiles (`Gentle`, `Hard`, `ExtremeSafe`)**:
-  - 4-stage progressive volume ramp on `USAGE_ALARM`, escalating vibration cadence, and dual-tone siren fallback.
-  - **Acoustic Safety**: Automatically attenuates alarm volume to **25%** while you are actively solving a mission, and restores **100%** volume if no input is detected within the mission timeout.
-- **Unlock Mission Chains (1–5 sequential missions)**:
-  1. **Math Equations (`MATH`)**: Multi-step arithmetic (`EASY` / `MEDIUM` / `HARD`) with a built-in lockscreen tactical Numpad.
-  2. **Step Counter (`STEPS`)**: Requires 20–100 physical steps using hardware `TYPE_STEP_COUNTER` (with `TYPE_ACCELEROMETER` step-peak fallback).
-  3. **Bathroom QR Code (`QR`)**: Real-time on-device CameraX + ZXing `MultiFormatReader` scanning (`ImageProxy` closed in-memory inside `finally`, zero disk storage) + built-in printable QR generator.
-  4. **NFC Tag (`NFC`)**: Hardware `NfcAdapter.enableReaderMode` active strictly during the NFC mission window + fallback cognitive code entry.
-  5. **Voice Phrase (`VOICE`)**: On-device `SpeechRecognizer` verification with Levenshtein similarity ≥ 65%.
-- **Anti-Snooze & Penalty-Snooze**: System back gesture is intercepted (`BackHandler`); if Penalty-Snooze is enabled, postponing the alarm by 5 minutes requires typing an exact verification phrase.
-- **Anti-Return-to-Bed Verification**: 5 minutes after completing all missions, a 60-second readiness check triggers. If unconfirmed, the full `T0` alarm and mission chain restart automatically.
-- **Bilingual UI (`Auto` / `RU` / `EN`) & Theme Selector (`Dark` / `Light` / `System`)**: Switchable anytime from the top app bar or the **Config** tab.
+#### 1. Как установить и обновлять приложение
+1. Перейдите в раздел **[Releases](../../releases)** этого репозитория на GitHub и скачайте последний файл `.apk`.
+2. Установите APK на свой Android-смартфон (Android 8.0 и новее).
+3. **Обновление до новых версий**:
+   - Вы можете проверять выход новых версий прямо внутри приложения: откройте вкладку **Опции → Обновление через GitHub** и нажмите **«Проверить обновления на GitHub»**.
+   - Скачайте новый APK со страницы релизов и установите его **поверх текущей версии** (удалять старую версию не нужно — все ваши будильники, QR-коды и настройки сохранятся).
 
----
+#### 2. Первоначальная настройка после установки
+1. **Вкладка «Защита» (Разрешения Android)**:
+   - Выдайте разрешения **«Точные будильники»**, **«Полноэкранный вызов»** и **«Экстренные уведомления»**.
+   - Рекомендуется добавить приложение в **«Исключения из экономии заряда»**, чтобы оболочка смартфона (Xiaomi HyperOS/MIUI, Samsung OneUI и др.) не останавливала будильник ночью.
+   - Выдайте доступ к камере, шагомеру или микрофону, если планируете использовать соответствующие миссии.
+2. **Вкладка «Опции» (Тема, Язык, QR-код и Умный дом)**:
+   - Выберите удобную тему (**Тёмная**, **Светлая** или **Авто**) и язык интерфейса (**Авто**, **Русский** или **English**) — переключатели также доступны на верхней панели.
+   - В карточке **«Контрольный QR-код для ванной / кухни»** нажмите кнопку отправки, распечатайте QR-код и приклейте его в ванной комнате.
+   - При желании укажите локальные адреса Webhook вашего умного дома (Home Assistant) и номер резервного контакта.
+3. **Вкладка «Штаб» (Создание и проверка рубежа)**:
+   - Нажмите **«Новый рубеж»**, выберите время, дни недели, профиль эскалации и цепочку миссий.
+   - Используйте блок **«Полигон проверки сигнала и миссий»** (`Тест T0`, `Рассвет T−15`, `Тест «Анти-возврат»`), чтобы заранее протестировать звук, камеру и шагомер.
 
-### 2. Custom Certificate Signing & In-Place Updates via GitHub Releases
-
-To ensure **Google Play Protect** and mobile antivirus scanners trust your APK—and to allow installing **new versions over existing ones without losing alarms, logs, or settings**—follow these 3 Android rules:
-1. **Consistent `applicationId`**: Keep `com.aistudio.alarmcommander.tqxk` unchanged in `app/build.gradle.kts`.
-2. **Consistent Release Keystore (`my-upload-key.jks`)**: Sign every release with the exact same developer certificate. You can verify the active APK SHA-256 certificate fingerprint inside the app under **Config → GitHub Releases Update & APK Signature**.
-3. **Increment `versionCode`**: Increase `versionCode` (`1` → `2` → `3`) and `versionName` (`"1.0"` → `"1.1"`) in `app/build.gradle.kts` before building a new release.
-
-#### Step 1: Generate Your Personal Release Keystore (`my-upload-key.jks`)
-Run once on your workstation using JDK `keytool`:
-```bash
-keytool -genkeypair -v \
-  -keystore my-upload-key.jks \
-  -alias upload \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -dname "CN=Alarm Commander, OU=Mobile Security, O=AlarmCommander, L=Limassol, S=Limassol, C=CY"
-```
-> Keep `my-upload-key.jks` backed up securely and **never commit it to a public Git repository**.
-
-#### Step 2: Build a Signed Release APK
-`app/build.gradle.kts` (`signingConfigs.getByName("release")`) is pre-configured to read your keystore credentials from environment variables:
-```bash
-export KEYSTORE_PATH="/absolute/path/to/my-upload-key.jks"
-export STORE_PASSWORD="your_keystore_password"
-export KEY_PASSWORD="your_key_password"
-
-./gradlew assembleRelease
-```
-The signed release APK will be generated at `app/build/outputs/apk/release/app-release.apk`.
-
-#### Step 3: Updating Over Existing Installations via GitHub Releases
-1. **In-App GitHub Release Checker (Play Protect & Play Policy Compliant)**:
-   - Upload your signed `app-release.apk` to your repository's **GitHub Releases** page (e.g., tag `v1.1`).
-   - In the app, open **Config → GitHub Releases Update & APK Signature**, enter your `owner/repo`, and tap **"Check for Updates on GitHub"**.
-   - When a newer release tag is detected, tap **"Open GitHub Releases Page / Download APK"**. Android's system browser downloads the APK and installs it **in-place over the existing version**, preserving all Room alarms and DataStore settings because the SHA-256 certificate matches.
-2. **Via ADB during local testing**:
-   ```bash
-   adb install -r app/build/outputs/apk/release/app-release.apk
-   ```
+> **Предупреждение о безопасности**: Приложение является вспомогательным инструментом дисциплины пробуждения, **не гарантирует пробуждение на 100%** и **не является медицинским устройством**. В приложении намеренно исключены любые опасные для здоровья методы (высокочастотные стробоскопы, скрытая запись, передача личных данных).
 
 ---
 
-### 3. Архитектура и запуск тестов / Architecture & Running Tests
+## 🇬🇧 ABOUT THE APPLICATION (ENGLISH)
 
-```text
-app/src/main/java/com/example/
-├── MainActivity.kt                  # Edge-to-edge UI host, NFC reader lifecycle, Theme & Language provider
-├── alarm/
-│   ├── AlarmScheduler.kt            # Exact AlarmManager.setAlarmClock + Sunrise T-15 scheduling
-│   ├── AlarmAudioController.kt      # Progressive volume ramp, vibration cadence & dual-tone synthesis
-│   ├── AlarmService.kt              # ForegroundService (specialUse), 10m WakeLock cap, Eco battery guard
-│   ├── AlarmReceiver.kt             # BroadcastReceiver for T0, Sunrise & Anti-Return triggers
-│   ├── BootReceiver.kt              # Reschedules enabled alarms on BOOT_COMPLETED / MY_PACKAGE_REPLACED
-│   └── TimeChangeReceiver.kt        # Recalculates schedules on TIME_SET / TIMEZONE_CHANGED
-├── data/
-│   ├── Entities.kt                  # AlarmEntity, AlarmLogEntity, MissionType, EscalationProfile
-│   ├── AlarmDao.kt                  # Room DAO with 500-row log rotation
-│   ├── AppDatabase.kt               # Room SQLite singleton
-│   └── AlarmRepository.kt           # Repository + initial tactical presets
-├── escalation/
-│   └── EscalationEngine.kt          # Pure state machine for 4-stage escalation & 25% mission attenuation
-├── mission/
-│   ├── MissionValidator.kt          # Pure validators for MATH, STEPS, QR, NFC, VOICE & Penalty-Snooze
-│   ├── QrCodeUtils.kt               # ZXing QR generator + safe CameraX analyzer
-│   ├── StepSensorTracker.kt         # Hardware TYPE_STEP_COUNTER + accelerometer fallback
-│   └── VoiceSpeechHelper.kt         # SpeechRecognizer wrapper
-├── backup/
-│   └── BackupChannel.kt             # RFC-1918/HTTPS Webhook validator, Social Contact & Post-MVP Stubs
-├── permissions/
-│   ├── PermissionManager.kt         # Android 8–16 permission evaluator & step-by-step intents
-│   └── SafetyAndPowerAuditor.kt     # Real-time battery, WakeLock, sensor & webhook security auditor
-├── settings/
-│   ├── SettingsRepository.kt        # Jetpack DataStore preferences & process-death session recovery
-│   └── GitHubUpdateChecker.kt       # GitHub Releases API version checker & APK SHA-256 cert inspector
-└── ui/
-    ├── AppLocalization.kt           # Bilingual RU/EN strings & Theme/Language enums
-    ├── AlarmCommanderViewModel.kt   # MVVM state holder
-    └── screens/
-        ├── CommandCenterScreen.kt   # Tactical Radar, Proving Ground, Alarm cards & Editor Dialog
-        ├── ActiveAlarmScreen.kt     # Lockscreen Combat UI, Mission Chain, Sunrise & Anti-Return views
-        └── PermissionsAndSettingsScreens.kt # Security Audit, Permissions, Logs, Theme/Lang & GitHub Updates
-```
+### Why Alarm Commander?
+Standard alarms are easy to swipe away while half-asleep or snooze indefinitely. **Alarm Commander** eliminates autopilot dismissal: to silence the alarm, you must physically get out of bed, complete a customizable chain of physical and cognitive missions, and pass an **Anti-Return-to-Bed** check minutes later.
 
-Запуск модульных и Robolectric-тестов / Run unit & Robolectric tests:
-```bash
-gradle :app:testDebugUnitTest
-```
+### How the Wake-Up Pipeline Works
+1. **Sunrise Pre-Alarm (`T−15 minutes`)**:
+   - 15 minutes before the main alarm, the screen gradually illuminates with a warm dawn gradient and optionally triggers a local Smart Home Webhook (e.g., Home Assistant smart bulb).
+2. **Exact Wake-Up at `T0` (`AlarmManager.setAlarmClock`)**:
+   - Wakes the device from deep Doze mode, launches a high-priority foreground service over the lockscreen, and locks the system Back button/gesture.
+3. **4-Stage Sound & Vibration Escalation**:
+   - Choose between **Gentle**, **Hard**, and **ExtremeSafe** profiles.
+   - If unacknowledged within 20–45 seconds, volume progressively ramps up to 100%, vibration cadence intensifies, and a dual-tone siren engages.
+   - **Mission Volume Attenuation**: Once you start solving a mission, alarm volume automatically drops to **25%** so you can focus, and restores to **100%** if you stop interacting for 30 seconds.
+4. **Unlock Mission Chains (1 to 5 sequential tasks)**:
+   - **Math (`MATH`)**: Solve 3–5 arithmetic equations (`Easy`, `Medium`, `Hard`) using the built-in lockscreen tactical Numpad.
+   - **Step Counter (`STEPS`)**: Walk 20–100 physical steps measured by the hardware step sensor.
+   - **Bathroom QR (`QR`)**: Scan a printed QR code placed in your bathroom or kitchen.
+   - **NFC Tag (`NFC`)**: Tap your phone against a registered NFC tag away from your bed.
+   - **Voice Phrase (`VOICE`)**: Speak a verification phrase aloud.
+5. **Anti-Snooze & Penalty-Snooze**:
+   - Snooze is disabled by default. If Penalty-Snooze is enabled in the alarm settings, postponing the alarm by 5 minutes requires typing a full verification sentence without typos.
+6. **Anti-Return-to-Bed Verification**:
+   - 5 minutes after completing all missions, a 60-second readiness check triggers. If you do not confirm that you are awake, the full `T0` alarm and mission chain restart automatically.
+7. **Overdue Backup Channels**:
+   - If the alarm is not dismissed within the safety window, the app can trigger an Overdue Smart Home Webhook and display a quick-action alert for your backup contact.
+
+---
+
+### Installation & Setup Guide (EN)
+
+#### 1. Installing & Updating from GitHub Releases
+1. Go to the **[Releases](../../releases)** page of this repository and download the latest `.apk` file.
+2. Install the APK on your Android device (Android 8.0+).
+3. **In-Place Updates**:
+   - You can check for new releases directly inside the app under **Config → GitHub Releases Update** by tapping **"Check for Updates on GitHub"**.
+   - Download the new APK from the Releases page and install it **directly over your existing installation**—all your alarms, logs, and settings are preserved automatically.
+
+#### 2. Initial Configuration
+1. **Guard Tab (Permissions)**:
+   - Grant **Exact Alarms**, **Full-Screen Intent**, and **High-Priority Notifications**.
+   - Enable **Unrestricted Battery** so aggressive OEM battery savers do not terminate the alarm overnight.
+   - Grant Camera, Physical Activity, or Microphone permissions for the missions you use.
+2. **Config Tab (Theme, Language, QR Code & Smart Home)**:
+   - Switch between **Dark**, **Light**, or **System** theme and select **Auto (OS)**, **Русский**, or **English** language (also accessible right from the top bar).
+   - Generate and share your **Control QR Code** to print and place in your bathroom or kitchen.
+   - Optionally configure local Smart Home Webhook URLs (`https://` or local `192.168.x.x` / `10.x.x.x` LAN) and a backup contact.
+3. **HQ Tab (Create & Test Alarms)**:
+   - Tap **"New Alarm"** to configure time, days of week, escalation profile, and mission chain.
+   - Use the **Signal & Mission Proving Ground** (`Test T0`, `Sunrise T−15`, `Test Anti-Return`) to test your setup anytime.
+
+> **Safety Disclaimer**: Alarm Commander is a supplementary wake-up discipline tool, **does not guarantee 100% wake-up**, and is **not a medical or life-support device**. All data is stored strictly on-device.
