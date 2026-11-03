@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 840" width="420" height="840">
+  <!-- Phone Frame / Combat Pulse Background -->
+  <rect width="420" height="840" rx="28" fill="#170B0E" stroke="#FF5252" stroke-width="2"/>
+
+  <!-- Top Combat Alert Banner -->
+  <rect x="20" y="24" width="380" height="42" rx="8" fill="#FF5252" fill-opacity="0.2" stroke="#FF5252" stroke-width="1.2"/>
+  <text x="210" y="50" fill="#FF5252" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">⚠ БОЕВАЯ ТРЕВОГА • АВТОПИЛОТ ЗАБЛОКИРОВАН</text>
+
+  <!-- Big Clock & Label -->
+  <text x="210" y="128" fill="#F1F5F9" font-family="monospace" font-size="56" font-weight="bold" text-anchor="middle">07:00</text>
+  <text x="210" y="156" fill="#FFB300" font-family="sans-serif" font-size="18" font-weight="bold" text-anchor="middle">Утренний подъём</text>
+
+  <!-- Escalation Telemetry Card -->
+  <rect x="20" y="174" width="380" height="104" rx="14" fill="#131B26" stroke="#334155" stroke-width="1"/>
+  <text x="34" y="198" fill="#FFB300" font-family="monospace" font-size="12" font-weight="bold">ПРОФИЛЬ: HARD • ЭТАП 2/4</text>
+  <text x="386" y="198" fill="#00E676" font-family="monospace" font-size="12" font-weight="bold" text-anchor="end">🔊 25%</text>
+  <!-- Progress Bar -->
+  <rect x="34" y="210" width="352" height="8" rx="4" fill="#1C2738"/>
+  <rect x="34" y="210" width="176" height="8" rx="4" fill="#00E676"/>
+  <text x="34" y="238" fill="#94A3B8" font-family="sans-serif" font-size="12">Миссия выполняется: громкость временно снижена</text>
+  <text x="34" y="254" fill="#94A3B8" font-family="sans-serif" font-size="12">до 25% (возврат к 100% через 30 сек бездействия)</text>
+
+  <!-- Active Mission Container -->
+  <rect x="20" y="294" width="380" height="518" rx="16" fill="#131B26" stroke="#FFB300" stroke-width="1.4"/>
+  <text x="36" y="322" fill="#FFB300" font-family="monospace" font-size="12" font-weight="bold">МИССИЯ 1 ИЗ 3</text>
+  <text x="384" y="322" fill="#00E676" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="end">Математика</text>
+  <text x="210" y="346" fill="#94A3B8" font-family="monospace" font-size="11" text-anchor="middle">Решено примеров: 2 / 3</text>
+
+  <!-- Math Equation Box -->
+  <rect x="36" y="358" width="348" height="72" rx="12" fill="#0B0F17" stroke="#1C2738" stroke-width="1"/>
+  <text x="210" y="405" fill="#FFB300" font-family="monospace" font-size="32" font-weight="bold" text-anchor="middle">(16 × 4) − 15 = ?</text>
+
+  <!-- Answer Input -->
+  <rect x="36" y="442" width="348" height="50" rx="10" fill="#0B0F17" stroke="#FFB300" stroke-width="1.2"/>
+  <text x="52" y="460" fill="#FFB300" font-family="sans-serif" font-size="10">Ответ</text>
+  <text x="52" y="481" fill="#F1F5F9" font-family="monospace" font-size="20" font-weight="bold">49|</text>
+
+  <!-- Tactical Numpad (4 rows x 3 cols) -->
+  <!-- Row 1 -->
+  <rect x="36" y="504" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="91" y="533" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">1</text>
+  <rect x="155" y="504" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="210" y="533" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">2</text>
+  <rect x="274" y="504" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="329" y="533" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">3</text>
+
+  <!-- Row 2 -->
+  <rect x="36" y="558" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="91" y="587" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">4</text>
+  <rect x="155" y="558" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="210" y="587" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">5</text>
+  <rect x="274" y="558" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="329" y="587" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">6</text>
+
+  <!-- Row 3 -->
+  <rect x="36" y="612" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="91" y="641" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">7</text>
+  <rect x="155" y="612" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="210" y="641" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">8</text>
+  <rect x="274" y="612" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="329" y="641" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">9</text>
+
+  <!-- Row 4 -->
+  <rect x="36" y="666" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="91" y="695" fill="#FFB300" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">±</text>
+  <rect x="155" y="666" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="210" y="695" fill="#F1F5F9" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">0</text>
+  <rect x="274" y="666" width="110" height="46" rx="10" fill="#1C2738"/>
+  <text x="329" y="695" fill="#FF5252" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">⌫</text>
+
+  <!-- Verify Answer Button -->
+  <rect x="36" y="726" width="348" height="54" rx="12" fill="#00E676"/>
+  <text x="210" y="759" fill="#0B0F17" font-family="sans-serif" font-size="15" font-weight="bold" text-anchor="middle">ПРОВЕРИТЬ ОТВЕТ</text>
+</svg>

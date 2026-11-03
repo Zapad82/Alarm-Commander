@@ -20,8 +20,12 @@ data class EscalationSnapshot(
     val overdueTriggered: Boolean,
     val batterySafetyCutoffReached: Boolean = false,
     val ecoModeActive: Boolean = false,
-    val statusDescriptionRu: String
-)
+    val statusDescriptionRu: String,
+    val statusDescriptionEn: String = statusDescriptionRu
+) {
+    fun statusDescription(isEnglish: Boolean): String =
+        if (isEnglish) statusDescriptionEn else statusDescriptionRu
+}
 
 /**
  * Движок эскалации сигнала и машина состояний будильника.
@@ -165,7 +169,8 @@ class EscalationEngine {
                 overdueTriggered = false,
                 batterySafetyCutoffReached = cutoffReached,
                 ecoModeActive = lowBatteryEcoMode,
-                statusDescriptionRu = "Фаза «Рассвет» (T−15): мягкая подсветка экрана и webhook умной лампы"
+                statusDescriptionRu = "Фаза «Рассвет» (T−15): мягкая подсветка экрана и webhook умной лампы",
+                statusDescriptionEn = "Sunrise Phase (T−15): soft screen illumination & smart lamp webhook"
             )
         }
 
@@ -230,7 +235,7 @@ class EscalationEngine {
             rawVibrationLevel
         }
 
-        val statusDesc = when {
+        val statusDescRu = when {
             cutoffReached ->
                 "Защита батареи: достигнут лимит непрерывного сигнала (${maxDurationSec / 60} мин). Звук переведён в ждущий режим."
             isMissionActiveRecently ->
@@ -243,6 +248,21 @@ class EscalationEngine {
                 "Эскалация Уровень 2: усиление звука ($effectiveVolume%) и подключение второго генератора"
             else ->
                 "Уровень 1 (Старт T0): базовая вибрация и нарастающий тон ($effectiveVolume%)"
+        }
+
+        val statusDescEn = when {
+            cutoffReached ->
+                "Battery protection: max continuous ring limit (${maxDurationSec / 60} min) reached. Audio placed on standby."
+            isMissionActiveRecently ->
+                "Mission in progress: volume attenuated to 25% (${MISSION_ATTENUATION_WINDOW_SEC - secSinceInteraction}s until full volume)"
+            stage == 4 ->
+                "CRITICAL OVERDUE (Stage 4): max volume + backup channels triggered!"
+            stage == 3 ->
+                "Escalation Stage 3: max volume ($effectiveVolume%), dual-tone siren & tactical vibration pulse"
+            stage == 2 ->
+                "Escalation Stage 2: volume boost ($effectiveVolume%) & secondary tone generator engaged"
+            else ->
+                "Stage 1 (T0 Start): base vibration & progressive alarm tone ($effectiveVolume%)"
         }
 
         return EscalationSnapshot(
@@ -259,7 +279,8 @@ class EscalationEngine {
             overdueTriggered = isOverdue,
             batterySafetyCutoffReached = cutoffReached,
             ecoModeActive = lowBatteryEcoMode,
-            statusDescriptionRu = statusDesc
+            statusDescriptionRu = statusDescRu,
+            statusDescriptionEn = statusDescEn
         )
     }
 }

@@ -61,6 +61,7 @@ import com.example.ui.AppThemeMode
 import com.example.ui.EnglishStrings
 import com.example.ui.LocalAppStrings
 import com.example.ui.RussianStrings
+import com.example.ui.localizeRuntimeText
 import com.example.ui.screens.ActiveAlarmScreen
 import com.example.ui.screens.CommandCenterScreen
 import com.example.ui.screens.LogsScreen
@@ -202,7 +203,7 @@ fun AlarmCommanderApp(
             LaunchedEffect(bannerMessage) {
                 val msg = bannerMessage
                 if (!msg.isNullOrBlank()) {
-                    snackbarHostState.showSnackbar(msg)
+                    snackbarHostState.showSnackbar(msg.localizeRuntimeText(s.isEnglish))
                     viewModel.clearBannerMessage()
                 }
             }

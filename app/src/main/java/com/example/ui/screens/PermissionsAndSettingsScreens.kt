@@ -74,6 +74,7 @@ import com.example.settings.GitHubReleaseCheckResult
 import com.example.ui.AppLanguageMode
 import com.example.ui.AppThemeMode
 import com.example.ui.LocalAppStrings
+import com.example.ui.localizeRuntimeText
 import com.example.ui.theme.RadarEmerald
 import com.example.ui.theme.TacticalAmber
 import java.text.SimpleDateFormat
@@ -372,7 +373,7 @@ fun LogsScreen(
                                 val report = buildString {
                                     appendLine("=== ALARM COMMANDER LOG REPORT ===")
                                     logs.take(50).forEach { e ->
-                                        appendLine("${formatter.format(Date(e.timestamp))} | ${e.eventType} [${e.stateName}] | ${e.details}")
+                                        appendLine("${formatter.format(Date(e.timestamp))} | ${e.eventType} [${e.stateName}] | ${e.details.localizeRuntimeText(s.isEnglish)}")
                                     }
                                 }
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -461,7 +462,7 @@ fun LogsScreen(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = entry.details,
+                            text = entry.details.localizeRuntimeText(s.isEnglish),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -500,7 +501,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     var sunriseUrl by remember(settings.sunriseWebhookUrl) { mutableStateOf(settings.sunriseWebhookUrl) }
     var escalationUrl by remember(settings.escalationWebhookUrl) { mutableStateOf(settings.escalationWebhookUrl) }
-    var contactName by remember(settings.backupContactName) { mutableStateOf(settings.backupContactName) }
+    var contactName by remember(settings.backupContactName, s.isEnglish) {
+        mutableStateOf(settings.backupContactName.localizeRuntimeText(s.isEnglish))
+    }
     var contactPhone by remember(settings.backupContactPhone) { mutableStateOf(settings.backupContactPhone) }
     var qrPayload by remember(settings.defaultQrPayload) { mutableStateOf(settings.defaultQrPayload) }
     var nfcTagId by remember(settings.defaultNfcTagId) { mutableStateOf(settings.defaultNfcTagId) }

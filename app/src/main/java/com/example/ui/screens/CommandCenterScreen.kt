@@ -82,6 +82,7 @@ import com.example.data.MathDifficulty
 import com.example.data.MissionType
 import com.example.ui.AppStrings
 import com.example.ui.LocalAppStrings
+import com.example.ui.localizeRuntimeText
 import com.example.ui.localizedBadge
 import com.example.ui.localizedLabel
 import com.example.ui.localizedSubtitle
@@ -511,7 +512,10 @@ private fun TacticalRadarHeroBanner(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = s.profileLabelFormat(alarm.label, alarm.profileEnum.name),
+                        text = s.profileLabelFormat(
+                            alarm.label.localizeRuntimeText(s.isEnglish),
+                            alarm.profileEnum.name
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -577,7 +581,7 @@ private fun AlarmCardItem(
                         }
                     )
                     Text(
-                        text = "${alarm.label} • ${alarm.localizedDaysSummary(s)}",
+                        text = "${alarm.label.localizeRuntimeText(s.isEnglish)} • ${alarm.localizedDaysSummary(s)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -698,7 +702,8 @@ fun AlarmEditorDialog(
     var minute by remember { mutableIntStateOf(initialAlarm?.minute ?: 0) }
     var label by remember {
         mutableStateOf(
-            initialAlarm?.label ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний подъём"
+            initialAlarm?.label?.localizeRuntimeText(s.isEnglish)
+                ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний подъём"
         )
     }
 
@@ -728,7 +733,7 @@ fun AlarmEditorDialog(
     }
     var voicePhrase by remember {
         mutableStateOf(
-            initialAlarm?.voicePhraseExpected
+            initialAlarm?.voicePhraseExpected?.localizeRuntimeText(s.isEnglish)
                 ?: if (s.isEnglish) "I am fully awake and ready for action" else "Я полностью проснулся и готов к действию"
         )
     }

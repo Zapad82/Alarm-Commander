@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 840" width="420" height="840">
+  <defs>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#131B26"/>
+      <stop offset="100%" stop-color="#182232"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Phone Frame / Background -->
+  <rect width="420" height="840" rx="28" fill="#0B0F17" stroke="#334155" stroke-width="2"/>
+
+  <!-- Top App Bar -->
+  <rect x="2" y="2" width="416" height="68" rx="26" fill="#131B26"/>
+  <text x="20" y="34" fill="#F1F5F9" font-family="sans-serif" font-size="19" font-weight="bold">Alarm Commander</text>
+  <text x="20" y="54" fill="#FFB300" font-family="monospace" font-size="10" font-weight="bold">ТАКТИЧЕСКИЙ КОНТРОЛЬ ПРОБУЖДЕНИЯ</text>
+  <!-- Language & Theme Quick Toggles -->
+  <rect x="302" y="22" width="58" height="28" rx="6" fill="#1C2738" stroke="#FFB300" stroke-width="1"/>
+  <text x="331" y="40" fill="#FFB300" font-family="monospace" font-size="11" font-weight="bold" text-anchor="middle">АВТО:RU</text>
+  <circle cx="384" cy="36" r="14" fill="#1C2738"/>
+  <circle cx="384" cy="36" r="6" fill="#FFB300"/>
+
+  <!-- 1. Tactical Radar Card -->
+  <rect x="16" y="84" width="388" height="106" rx="16" fill="url(#cardGrad)" stroke="#00E676" stroke-width="1.2" stroke-opacity="0.5"/>
+  <!-- Radar Canvas -->
+  <circle cx="64" cy="137" r="34" fill="#0B0F17" stroke="#00E676" stroke-width="1.2" stroke-opacity="0.5"/>
+  <circle cx="64" cy="137" r="23" fill="none" stroke="#00E676" stroke-width="1" stroke-opacity="0.35"/>
+  <circle cx="64" cy="137" r="12" fill="none" stroke="#00E676" stroke-width="1" stroke-opacity="0.35"/>
+  <line x1="64" y1="137" x2="89" y2="114" stroke="#FFB300" stroke-width="2.5"/>
+  <circle cx="64" cy="137" r="4" fill="#00E676"/>
+  <!-- Radar Telemetry Text -->
+  <text x="112" y="108" fill="#00E676" font-family="monospace" font-size="11" font-weight="bold">ДЕЖУРСТВО АКТИВНО</text>
+  <text x="388" y="108" fill="#00E5FF" font-family="monospace" font-size="11" font-weight="bold" text-anchor="end">ОС: 9/9</text>
+  <text x="112" y="134" fill="#F1F5F9" font-family="sans-serif" font-size="15" font-weight="bold">Следующий T0: 07:00 (через 6ч 15м)</text>
+  <text x="112" y="156" fill="#FFB300" font-family="sans-serif" font-size="13">Утренний подъём • Профиль HARD</text>
+  <text x="112" y="175" fill="#94A3B8" font-family="sans-serif" font-size="11">Локальное хранение • Без телеметрии</text>
+
+  <!-- 2. Signal & Mission Proving Ground Card -->
+  <rect x="16" y="202" width="388" height="176" rx="16" fill="#131B26" stroke="#FFB300" stroke-width="1.2" stroke-opacity="0.55"/>
+  <text x="32" y="226" fill="#FFB300" font-family="monospace" font-size="12" font-weight="bold">ПОЛИГОН ПРОВЕРКИ СИГНАЛА И МИССИЙ</text>
+  <text x="32" y="246" fill="#94A3B8" font-family="sans-serif" font-size="12">Проверьте эскалацию громкости, блокировку «Назад»,</text>
+  <text x="32" y="262" fill="#94A3B8" font-family="sans-serif" font-size="12">цепочку миссий и контроль анти-возврата прямо сейчас.</text>
+
+  <!-- Row Buttons: Test T0 & Sunrise T-15 -->
+  <rect x="32" y="274" width="172" height="44" rx="12" fill="#FFB300"/>
+  <text x="118" y="301" fill="#0B0F17" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">▶ Тест T0</text>
+
+  <rect x="216" y="274" width="172" height="44" rx="12" fill="#1C2738" stroke="#FFB300" stroke-width="1"/>
+  <text x="302" y="301" fill="#F1F5F9" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">☀ Рассвет T−15</text>
+
+  <!-- Full-width Anti-Return Test Button -->
+  <rect x="32" y="326" width="356" height="40" rx="12" fill="#1C2738" stroke="#334155" stroke-width="1"/>
+  <text x="210" y="351" fill="#F1F5F9" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle">Тест «Анти-возврат» (таймер 60 сек)</text>
+
+  <!-- 3. Alarm Card #1 (07:00 HARD) -->
+  <rect x="16" y="392" width="388" height="178" rx="16" fill="#131B26" stroke="#FFB300" stroke-width="1.2" stroke-opacity="0.5"/>
+  <text x="32" y="440" fill="#F1F5F9" font-family="monospace" font-size="38" font-weight="bold">07:00</text>
+  <text x="32" y="462" fill="#94A3B8" font-family="sans-serif" font-size="13">Утренний подъём • Будни (Пн–Пт)</text>
+  <!-- Switch ON -->
+  <rect x="340" y="416" width="48" height="26" rx="13" fill="#FFB300"/>
+  <circle cx="375" cy="429" r="10" fill="#0B0F17"/>
+
+  <!-- Badges Row 1 -->
+  <rect x="32" y="476" width="122" height="24" rx="6" fill="#FFB300" fill-opacity="0.16" stroke="#FFB300" stroke-width="0.8"/>
+  <text x="93" y="492" fill="#FFB300" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Эскалация: HARD</text>
+
+  <rect x="162" y="476" width="196" height="24" rx="6" fill="#FFB300" fill-opacity="0.16" stroke="#FFB300" stroke-width="0.8"/>
+  <text x="260" y="492" fill="#FFB300" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Миссии: МАТ → ШАГИ → QR</text>
+
+  <!-- Badges Row 2 -->
+  <rect x="32" y="506" width="90" height="24" rx="6" fill="#00E676" fill-opacity="0.16" stroke="#00E676" stroke-width="0.8"/>
+  <text x="77" y="522" fill="#00E676" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Анти-Snooze</text>
+
+  <rect x="130" y="506" width="104" height="24" rx="6" fill="#FFB300" fill-opacity="0.16" stroke="#FFB300" stroke-width="0.8"/>
+  <text x="182" y="522" fill="#FFB300" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Рассвет T−15м</text>
+
+  <rect x="242" y="506" width="116" height="24" rx="6" fill="#00E676" fill-opacity="0.16" stroke="#00E676" stroke-width="0.8"/>
+  <text x="300" y="522" fill="#00E676" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Анти-возврат 5м</text>
+
+  <text x="32" y="554" fill="#FFB300" font-family="sans-serif" font-size="13" font-weight="bold">▶ Запустить тест</text>
+
+  <!-- 4. Alarm Card #2 (07:30 EXTREME_SAFE) -->
+  <rect x="16" y="582" width="388" height="150" rx="16" fill="#131B26" stroke="#FF5252" stroke-width="1.2" stroke-opacity="0.5"/>
+  <text x="32" y="630" fill="#F1F5F9" font-family="monospace" font-size="38" font-weight="bold">07:30</text>
+  <text x="32" y="652" fill="#94A3B8" font-family="sans-serif" font-size="13">Резервный рубеж • Ежедневно</text>
+  <rect x="340" y="606" width="48" height="26" rx="13" fill="#FFB300"/>
+  <circle cx="375" cy="619" r="10" fill="#0B0F17"/>
+
+  <rect x="32" y="666" width="166" height="24" rx="6" fill="#FF5252" fill-opacity="0.16" stroke="#FF5252" stroke-width="0.8"/>
+  <text x="115" y="682" fill="#FF5252" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Эскалация: EXTREME_SAFE</text>
+
+  <rect x="206" y="666" width="164" height="24" rx="6" fill="#FFB300" fill-opacity="0.16" stroke="#FFB300" stroke-width="0.8"/>
+  <text x="288" y="682" fill="#FFB300" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">Миссии: NFC → ГОЛОС</text>
+
+  <!-- FAB -->
+  <rect x="248" y="704" width="152" height="48" rx="14" fill="#FFB300"/>
+  <text x="324" y="733" fill="#0B0F17" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">+ Новый рубеж</text>
+
+  <!-- Bottom Navigation Bar -->
+  <rect x="2" y="768" width="416" height="70" rx="26" fill="#131B26"/>
+  <rect x="28" y="778" width="64" height="28" rx="14" fill="#3A2800"/>
+  <text x="60" y="797" fill="#FFB300" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle">⏰</text>
+  <text x="60" y="822" fill="#FFB300" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">Штаб</text>
+
+  <text x="160" y="797" fill="#94A3B8" font-family="sans-serif" font-size="13" text-anchor="middle">🛡</text>
+  <text x="160" y="822" fill="#94A3B8" font-family="sans-serif" font-size="12" text-anchor="middle">Защита</text>
+
+  <text x="260" y="797" fill="#94A3B8" font-family="sans-serif" font-size="13" text-anchor="middle">📋</text>
+  <text x="260" y="822" fill="#94A3B8" font-family="sans-serif" font-size="12" text-anchor="middle">Журнал</text>
+
+  <text x="360" y="797" fill="#94A3B8" font-family="sans-serif" font-size="13" text-anchor="middle">⚙</text>
+  <text x="360" y="822" fill="#94A3B8" font-family="sans-serif" font-size="12" text-anchor="middle">Опции</text>
+</svg>

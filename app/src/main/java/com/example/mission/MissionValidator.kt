@@ -277,17 +277,31 @@ class VoicePhraseMission(
 
         val actualWords = normalizeWords(voiceInput.recognizedText)
         val expectedWords = normalizeWords(expectedPhrase)
+        val englishDefaultWords = if (expectedPhrase == "Я полностью проснулся и готов к действию") {
+            normalizeWords("I am fully awake and ready for action")
+        } else {
+            emptyList()
+        }
 
         if (actualWords.isEmpty()) {
             return MissionResult.Failed("Речь не распознана. Повторите фразу громче.", expectedPhrase)
         }
 
-        val matchedCount = expectedWords.count { exp -> actualWords.contains(exp) }
-        val matchRatio = if (expectedWords.isNotEmpty()) {
-            matchedCount.toDouble() / expectedWords.size.toDouble()
+        val matchedPrimary = expectedWords.count { exp -> actualWords.contains(exp) }
+        val ratioPrimary = if (expectedWords.isNotEmpty()) {
+            matchedPrimary.toDouble() / expectedWords.size.toDouble()
         } else {
             1.0
         }
+
+        val matchedAlt = englishDefaultWords.count { exp -> actualWords.contains(exp) }
+        val ratioAlt = if (englishDefaultWords.isNotEmpty()) {
+            matchedAlt.toDouble() / englishDefaultWords.size.toDouble()
+        } else {
+            0.0
+        }
+
+        val matchRatio = maxOf(ratioPrimary, ratioAlt)
 
         return if (matchRatio >= 0.75) {
             MissionResult.Completed("Голосовая фраза подтверждена: «${voiceInput.recognizedText.trim()}»")

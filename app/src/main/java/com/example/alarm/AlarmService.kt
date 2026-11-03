@@ -478,8 +478,12 @@ class AlarmService : Service() {
         val alarm = current.alarm ?: return false
         if (!alarm.allowSnooze) return false
 
-        val expected = current.penaltyPhraseRequired.trim()
-        if (!typedPhrase.trim().equals(expected, ignoreCase = true)) {
+        val expectedRu = current.penaltyPhraseRequired.trim()
+        val expectedEn = "I CONFIRM 5 MIN SNOOZE"
+        val normalizedTyped = typedPhrase.trim()
+        if (!normalizedTyped.equals(expectedRu, ignoreCase = true) &&
+            !normalizedTyped.equals(expectedEn, ignoreCase = true)
+        ) {
             _activeUiState.value = current.copy(
                 missionFeedback = "Фраза введена неверно! Автопилот не пройдёт."
             )

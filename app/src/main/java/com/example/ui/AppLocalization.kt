@@ -516,3 +516,144 @@ fun MathDifficulty.localizedLabel(isEnglish: Boolean): String = if (!isEnglish) 
     MathDifficulty.MEDIUM -> "Medium (16 × 4 − 15)"
     MathDifficulty.HARD -> "Hard ((18 × 7) + 49 − 23)"
 }
+
+/**
+ * Переводит динамические строки сервисов, датчиков, миссий, предзаполненных будильников и логов
+ * на английский язык, когда выбран английский интерфейс (isEnglish == true).
+ */
+fun String.localizeRuntimeText(isEnglish: Boolean): String {
+    if (!isEnglish || this.isBlank()) return this
+    val text = this
+
+    // 1. Точные совпадения (предзаполненные названия, статусы датчиков, дефолтные фразы)
+    when (text) {
+        "Подъём • Рабочий рубеж" -> return "Wake-Up • Workday"
+        "Субботний марш • Ванная QR" -> return "Saturday March • Bathroom QR"
+        "Боевой тест Alarm Commander" -> return "Alarm Commander Combat Test"
+        "Контроль анти-возврата" -> return "Anti-Return Check"
+        "Утренний подъём" -> return "Morning Wake-Up"
+        "Боевой рубеж" -> return "Tactical Alarm"
+        "Дежурный контакт" -> return "Emergency Contact"
+        "Я полностью проснулся и готов к действию" -> return "I am fully awake and ready for action"
+        "ПОДТВЕРЖДАЮ ПЕРЕНОС 5 МИН" -> return "I CONFIRM 5 MIN SNOOZE"
+        "Датчик движения активен" -> return "Motion sensor active"
+        "Ожидание сканирования QR-кода..." -> return "Waiting for QR code scan..."
+        "NFC-ридер ожидает касания метки" -> return "NFC reader waiting for tag tap"
+        "Произнесите контрольную фразу чётко вслух" -> return "Speak the verification phrase clearly aloud"
+        "Ошибка! Попробуйте ещё раз без автопилота." -> return "Incorrect! Try again without autopilot."
+        "Для Snooze введите контрольную фразу без ошибок" -> return "Type the verification phrase without typos to Snooze"
+        "Фраза введена неверно! Автопилот не пройдёт." -> return "Phrase mismatch! Autopilot blocked."
+        "Аппаратный STEP_DETECTOR" -> return "Hardware STEP_DETECTOR"
+        "Аппаратный STEP_COUNTER" -> return "Hardware STEP_COUNTER"
+        "Акселерометр (импульсный шагомер)" -> return "Accelerometer (step detector)"
+        "Датчик шагов не обнаружен" -> return "Step sensor not found"
+        "Ожидание датчика" -> return "Waiting for sensor"
+        "Инициализация датчика..." -> return "Initializing step sensor..."
+        "Нажмите кнопку микрофона и произнесите фразу вслух" -> return "Tap the microphone button and speak the phrase aloud"
+        "Системный сервис распознавания речи недоступен на этом эмуляторе — используйте контрольный ввод ниже." ->
+            return "System speech recognition is unavailable on this device — use the fallback input below."
+        "Микрофон активен: чётко произнесите фразу..." -> return "Microphone active: speak the phrase clearly..."
+        "Фиксация голоса..." -> return "Capturing voice..."
+        "Обработка произнесённой фразы..." -> return "Processing spoken phrase..."
+        "Пустой результат" -> return "Empty speech result"
+        "Речь не распознана. Повторите фразу громче." -> return "Speech not recognized. Repeat the phrase louder."
+        "Резервная тревога активирована" -> return "Backup alert triggered"
+        "Настройки сохранены / Settings saved" -> return "Settings saved"
+        "Журнал очищен / Logs cleared" -> return "Logs cleared"
+        "Запущена фаза «Рассвет» (T−15 мин)" -> return "Sunrise phase started (T−15 min)"
+        "Рассвет T−15 завершён пользователем" -> return "Sunrise T−15 dismissed by user"
+        "Запущена 60-секундная проверка бодрствования (Анти-возврат в кровать)" ->
+            return "60-second wakefulness verification started (Anti-Return to Bed)"
+        "Нет подтверждения анти-возврата за 60 сек — повторный запуск боевой тревоги!" ->
+            return "No Anti-Return confirmation within 60s — restarting full combat alarm!"
+        "Проверка анти-возврата успешно подтверждена: пользователь бодрствует." ->
+            return "Anti-Return check confirmed: user is awake."
+        "Пользователь ознакомился с условиями безопасности и ограничением ответственности" ->
+            return "User accepted the safety disclaimer and liability terms"
+        "Initial Seed: Подъём • Рабочий рубеж (07:00) & Субботний марш (08:30)" ->
+            return "Initial Seed: Wake-Up • Workday (07:00) & Saturday March (08:30)"
+    }
+
+    // 2. Шаблонные и составные сообщения (миссии, датчики, логи, резервные каналы)
+    var translated = text
+        .replace("Подъём • Рабочий рубеж", "Wake-Up • Workday")
+        .replace("Субботний марш • Ванная QR", "Saturday March • Bathroom QR")
+        .replace("Боевой тест Alarm Commander", "Alarm Commander Combat Test")
+        .replace("Контроль анти-возврата", "Anti-Return Check")
+        .replace("Удалён / Deleted:", "Deleted:")
+        .replace("Математика", "Math")
+        .replace("Шагомер (50–100)", "Steps (50–100)")
+        .replace("QR-код в ванной", "Bathroom QR")
+        .replace("NFC-метка", "NFC Tag")
+        .replace("Голосовая фраза", "Voice Phrase")
+        .replace("любая NFC-метка", "any NFC tag")
+
+    Regex("""Решите (\d+) примера подряд""").find(translated)?.let { m ->
+        return "Solve ${m.groupValues[1]} problems in a row"
+    }
+    Regex("""Верно! Осталось: (\d+)""").find(translated)?.let { m ->
+        return "Correct! Remaining: ${m.groupValues[1]}"
+    }
+    Regex("""Осталось пройти: (\d+) шагов""").find(translated)?.let { m ->
+        return "Remaining steps: ${m.groupValues[1]}"
+    }
+    Regex("""Шагов пройдено: (\d+) / (\d+)""").find(translated)?.let { m ->
+        return "Steps walked: ${m.groupValues[1]} / ${m.groupValues[2]}"
+    }
+    Regex("""Встаньте с кровати и пройдите (\d+) шагов""").find(translated)?.let { m ->
+        return "Get out of bed and walk ${m.groupValues[1]} steps"
+    }
+    Regex("""Неверный QR-код \(«(.*)»\)\. Нужен код: «(.*)»""").find(translated)?.let { m ->
+        return "Wrong QR code (\"${m.groupValues[1]}\"). Expected: \"${m.groupValues[2]}\""
+    }
+    Regex("""Чужая NFC-метка \((.*)\)\. Ожидалась: (.*)""").find(translated)?.let { m ->
+        return "Unrecognized NFC tag (${m.groupValues[1]}). Expected: ${m.groupValues[2]}"
+    }
+    Regex("""Распознано: «(.*)»\. Произнесите полную фразу чётко!""").find(translated)?.let { m ->
+        return "Recognized: \"${m.groupValues[1]}\". Speak the full phrase clearly!"
+    }
+    Regex("""Распознано: «(.*)»""").find(translated)?.let { m ->
+        return "Recognized: \"${m.groupValues[1]}\""
+    }
+    Regex("""Слышу: «(.*)»\.\.\.""").find(translated)?.let { m ->
+        return "Hearing: \"${m.groupValues[1]}\"..."
+    }
+    Regex("""Голос не распознан \(код (\d+)\)\..*""").find(translated)?.let { m ->
+        return "Speech not recognized (code ${m.groupValues[1]}). Tap the mic again or type the phrase below."
+    }
+    Regex("""Не удалось запустить SpeechRecognizer: (.*)""").find(translated)?.let { m ->
+        return "Failed to start SpeechRecognizer: ${m.groupValues[1]}"
+    }
+    Regex("""Этап (\d+)/(\d+) пройден! Следующая миссия: (.*)""").find(translated)?.let { m ->
+        return "Stage ${m.groupValues[1]}/${m.groupValues[2]} completed! Next mission: ${m.groupValues[3]}"
+    }
+    Regex("""Сигнал T0 запущен \(Профиль: (.*), миссии: (.*)\)""").find(translated)?.let { m ->
+        return "T0 alarm started (Profile: ${m.groupValues[1]}, missions: ${m.groupValues[2]})"
+    }
+    Regex("""Начато выполнение миссии: (.*)""").find(translated)?.let { m ->
+        return "Mission started: ${m.groupValues[1]}"
+    }
+    Regex("""Запланирован контроль анти-возврата через (\d+) мин""").find(translated)?.let { m ->
+        return "Anti-Return check scheduled in ${m.groupValues[1]} min"
+    }
+    Regex("""Все миссии выполнены \((.*)\)\. Будильник штатно отключён\.""").find(translated)?.let { m ->
+        return "All missions completed (${m.groupValues[1]}). Alarm dismissed."
+    }
+    Regex("""Выполнен штрафной Snooze на (\d+) мин""").find(translated)?.let { m ->
+        return "Penalty Snooze activated for ${m.groupValues[1]} min"
+    }
+
+    translated = translated
+        .replace("Не удалось отправить Webhook", "Webhook request failed")
+        .replace("Webhook успешно доставлен", "Webhook delivered")
+        .replace("Локальная симуляция Webhook", "Local Webhook simulation")
+        .replace("Создано экстренное уведомление для связи с контактом", "Emergency contact alert created for")
+        .replace("Заглушка канала вызвана", "Channel stub invoked")
+        .replace("Авто-звонок другу (Stub)", "Auto-Call Friend (Stub)")
+        .replace("Умная колонка в другой комнате (Stub)", "Living Room Smart Speaker (Stub)")
+        .replace("Вибро-шайба под матрас (Stub)", "Under-Mattress Bed Shaker (Stub)")
+        .replace("Второе устройство в локальной сети (Stub)", "Second Device on LAN (Stub)")
+
+    return translated
+}
+

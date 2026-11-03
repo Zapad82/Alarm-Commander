@@ -7,6 +7,13 @@
 
 ## 🇷🇺 О ПРИЛОЖЕНИИ (РУССКИЙ)
 
+### Скриншоты интерфейса
+| Штаб и тактический радар | Боевая тревога и миссия «Математика» |
+| :---: | :---: |
+| ![Штаб и тактический радар](docs/screenshots/01_command_center.svg) | ![Боевая тревога и миссия Математика](docs/screenshots/02_active_mission.svg) |
+| **Защита и энергоаудит (Android 8–16)** | **Опции, светлая тема и QR-генератор (EN)** |
+| ![Защита и энергоаудит](docs/screenshots/03_security_audit.svg) | ![Опции и светлая тема](docs/screenshots/04_config_light_en.svg) |
+
 ### Зачем нужен Alarm Commander?
 Обычные будильники легко выключить одним смахиванием, не просыпаясь до конца, или отложить кнопкой Snooze и снова уснуть. **Alarm Commander** решает эту проблему комплексно: чтобы отключить сигнал, необходимо физически встать с кровати и пройти заданную цепочку проверок, а спустя несколько минут — подтвердить, что вы не легли обратно.
 
@@ -63,6 +70,13 @@
 ---
 
 ## 🇬🇧 ABOUT THE APPLICATION (ENGLISH)
+
+### Application Screenshots
+| Command Center & Tactical Radar | Combat Alarm & Math Mission |
+| :---: | :---: |
+| ![Command Center & Tactical Radar](docs/screenshots/01_command_center.svg) | ![Combat Alarm & Math Mission](docs/screenshots/02_active_mission.svg) |
+| **Security & Power Audit (Android 8–16)** | **Config, Light Theme & QR Generator (EN)** |
+| ![Security & Power Audit](docs/screenshots/03_security_audit.svg) | ![Config & Light Theme](docs/screenshots/04_config_light_en.svg) |
 
 ### Why Alarm Commander?
 Standard alarms are easy to swipe away while half-asleep or snooze indefinitely. **Alarm Commander** eliminates autopilot dismissal: to silence the alarm, you must physically get out of bed, complete a customizable chain of physical and cognitive missions, and pass an **Anti-Return-to-Bed** check minutes later.

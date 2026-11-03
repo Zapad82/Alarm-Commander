@@ -91,6 +91,7 @@ import com.example.mission.StepSensorTracker
 import com.example.mission.VoiceSpeechHelper
 import com.example.mission.ZxingQrCodeAnalyzer
 import com.example.ui.LocalAppStrings
+import com.example.ui.localizeRuntimeText
 import com.example.ui.localizedTitle
 import com.example.ui.theme.AlertCrimson
 import com.example.ui.theme.RadarEmerald
@@ -149,7 +150,8 @@ fun ActiveAlarmScreen(
     // 1. Режим контроля «Анти-возврат в кровать»
     if (uiState.isAntiReturnPromptActive) {
         AntiReturnVerificationView(
-            alarmLabel = alarm?.label ?: if (s.isEnglish) "Wake Verification" else "Контроль пробуждения",
+            alarmLabel = alarm?.label?.localizeRuntimeText(s.isEnglish)
+                ?: if (s.isEnglish) "Wake Verification" else "Контроль пробуждения",
             secondsRemaining = uiState.antiReturnSecondsRemaining,
             onConfirmAwake = onConfirmAntiReturnAwake
         )
@@ -159,9 +161,10 @@ fun ActiveAlarmScreen(
     // 2. Режим предварительного «Рассвета» (T−15 минут)
     if (escalation?.state == AlarmState.PRE_ALARM_SUNRISE) {
         SunrisePreAlarmView(
-            alarmLabel = alarm?.label ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний рубеж",
+            alarmLabel = alarm?.label?.localizeRuntimeText(s.isEnglish)
+                ?: if (s.isEnglish) "Morning Wake-Up" else "Утренний рубеж",
             alarmTime = alarm?.formattedTime() ?: "07:00",
-            webhookStatus = uiState.lastBackupEventMessage,
+            webhookStatus = uiState.lastBackupEventMessage?.localizeRuntimeText(s.isEnglish),
             onWakeUpEarly = onDismissSunrise
         )
         return
@@ -220,7 +223,8 @@ fun ActiveAlarmScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = alarm?.label ?: if (s.isEnglish) "Combat Wake-Up" else "Боевой подъём",
+                text = alarm?.label?.localizeRuntimeText(s.isEnglish)
+                    ?: if (s.isEnglish) "Combat Wake-Up" else "Боевой подъём",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center
@@ -278,7 +282,7 @@ fun ActiveAlarmScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = escalation.statusDescriptionRu,
+                            text = escalation.statusDescription(s.isEnglish),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -286,7 +290,7 @@ fun ActiveAlarmScreen(
                         if (!uiState.lastBackupEventMessage.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "${s.backupChannelPrefix} ${uiState.lastBackupEventMessage}",
+                                text = "${s.backupChannelPrefix} ${uiState.lastBackupEventMessage.localizeRuntimeText(s.isEnglish)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -396,8 +400,8 @@ fun ActiveAlarmScreen(
                 }
             } else if (uiState.isPenaltySnoozeMode) {
                 PenaltySnoozeCard(
-                    requiredPhrase = uiState.penaltyPhraseRequired,
-                    feedback = uiState.missionFeedback,
+                    requiredPhrase = uiState.penaltyPhraseRequired.localizeRuntimeText(s.isEnglish),
+                    feedback = uiState.missionFeedback?.localizeRuntimeText(s.isEnglish),
                     onSubmitPhrase = onSubmitPenaltySnooze,
                     onCancel = { onTogglePenaltySnooze(false) }
                 )
@@ -465,7 +469,7 @@ private fun MissionExecutionContainer(
 
             if (!uiState.missionFeedback.isNullOrBlank()) {
                 Text(
-                    text = uiState.missionFeedback,
+                    text = uiState.missionFeedback.localizeRuntimeText(s.isEnglish),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -676,7 +680,7 @@ private fun StepsMissionView(
             textAlign = TextAlign.Center
         )
         Text(
-            text = s.stepsSensorSource(sensorSource),
+            text = s.stepsSensorSource(sensorSource.localizeRuntimeText(s.isEnglish)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -1027,7 +1031,7 @@ private fun VoiceMissionView(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "«$expectedPhrase»",
+                text = "«${expectedPhrase.localizeRuntimeText(s.isEnglish)}»",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
@@ -1036,7 +1040,7 @@ private fun VoiceMissionView(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = voiceStatus,
+            text = voiceStatus.localizeRuntimeText(s.isEnglish),
             style = MaterialTheme.typography.labelSmall,
             color = if (isListening) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
