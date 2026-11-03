@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">Alarm Commander</string>
+
+    <!-- Навигация -->
+    <string name="nav_command_center">Штаб</string>
+    <string name="nav_permissions">Разрешения</string>
+    <string name="nav_logs">Журнал</string>
+    <string name="nav_settings">Резерв и QR</string>
+
+    <!-- Дисклеймер и безопасность -->
+    <string name="disclaimer_title">Важное предупреждение о безопасности</string>
+    <string name="disclaimer_body">Alarm Commander — это многослойная система снижения риска проспать, а НЕ медицинское устройство и не средство жизнеобеспечения. Приложение не гарантирует 100% пробуждение при аппаратных сбоях, разряде батареи или принудительной остановке ОС. В приложении строго запрещены опасные методы (стробоскопы &gt;2 Гц, экстремальные частоты, скрытая запись или отправка данных без вашего согласия).</string>
+    <string name="disclaimer_accept">Понятно, принимаю условия</string>
+    <string name="disclaimer_banner_short">Многослойная система снижения риска проспать • Локальное хранение без телеметрии</string>
+
+    <!-- Главный экран (Штаб) -->
+    <string name="header_subtitle">ТАКТИЧЕСКИЙ КОНТРОЛЬ ПРОБУЖДЕНИЯ</string>
+    <string name="btn_new_alarm">Новый рубеж</string>
+    <string name="btn_test_alarm">Боевой тест T0</string>
+    <string name="btn_test_sunrise">Тест Рассвета T−15</string>
+    <string name="empty_alarms_title">Нет активных будильников</string>
+    <string name="empty_alarms_Hint">Создайте первый многослойный будильник или запустите мгновенный боевой тест.</string>
+
+    <!-- Профили эскалации -->
+    <string name="profile_gentle">Gentle (Мягкий старт)</string>
+    <string name="profile_hard">Hard (Усиленный)</string>
+    <string name="profile_extreme_safe">ExtremeSafe (Максимум без риска)</string>
+
+    <!-- Миссии -->
+    <string name="mission_math">Математика</string>
+    <string name="mission_steps">Шагомер (50–100 шагов)</string>
+    <string name="mission_qr">QR-код в ванной</string>
+    <string name="mission_nfc">NFC-метка</string>
+
+    <!-- Экран активной тревоги -->
+    <string name="alarm_ringing_badge">БОЕВАЯ ТРЕВОГА • АВТОПИЛОТ ЗАБЛОКИРОВАН</string>
+    <string name="alarm_sunrise_badge">ПРЕДВАРИТЕЛЬНЫЙ РАССВЕТ (T−15 МИН)</string>
+    <string name="btn_start_mission">ПРИСТУПИТЬ К МИССИИ ОТКЛЮЧЕНИЯ</string>
+    <string name="btn_penalty_snooze">Штрафной Snooze (+5 мин после задачи)</string>
+    <string name="anti_snooze_locked">Анти-Snooze активен: отключение только через цепочку миссий</string>
+    <string name="anti_return_banner_title">КОНТРОЛЬ АНТИ-ВОЗВРАТА В КРОВАТЬ</string>
+    <string name="anti_return_confirm_btn">Я НЕ В КРОВАТИ • ПОДТВЕРДИТЬ БОДРСТВОВАНИЕ</string>
+
+    <!-- Уведомления -->
+    <string name="notif_channel_alarm_name">Боевая тревога Alarm Commander</string>
+    <string name="notif_channel_alarm_desc">Полноэкранный сигнал будильника с эскалацией громкости</string>
+    <string name="notif_channel_backup_name">Анти-возврат и резервные оповещения</string>
+    <string name="notif_channel_backup_desc">Проверка бодрствования после отключения и резервные каналы</string>
+</resources>

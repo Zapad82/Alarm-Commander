@@ -1,0 +1,8 @@
+{
+  "name": "Alarm Commander",
+  "description": "Многослойный тактический будильник с эскалацией сигнала, цепочками миссий (QR, NFC, шаги, математика), защитой от возврата в кровать и резервными каналами.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
