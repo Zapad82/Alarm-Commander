@@ -61,6 +61,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,7 @@ import com.example.permissions.PermissionItemStatus
 import com.example.permissions.PermissionManager
 import com.example.settings.CommanderSettingsState
 import com.example.settings.GitHubReleaseCheckResult
+import com.example.settings.GitHubUpdateChecker
 import com.example.ui.AppLanguageMode
 import com.example.ui.AppThemeMode
 import com.example.ui.LocalAppStrings
@@ -527,7 +529,6 @@ fun SettingsScreen(
     var contactPhone by remember(settings.backupContactPhone) { mutableStateOf(settings.backupContactPhone) }
     var qrPayload by remember(settings.defaultQrPayload) { mutableStateOf(settings.defaultQrPayload) }
     var nfcTagId by remember(settings.defaultNfcTagId) { mutableStateOf(settings.defaultNfcTagId) }
-    var githubRepoSlug by remember(settings.githubRepoSlug) { mutableStateOf(settings.githubRepoSlug) }
 
     var selectedSignalMode by remember(settings.defaultSignalMode) {
         mutableStateOf(AlarmSignalMode.fromName(settings.defaultSignalMode))
@@ -547,6 +548,12 @@ fun SettingsScreen(
 
     var isPreviewPlaying by remember { mutableStateOf(false) }
     val previewAudioController = remember { AlarmAudioController(context) }
+
+    LaunchedEffect(Unit) {
+        if (!githubReleaseState.checked && !githubReleaseState.isChecking) {
+            onCheckGithubUpdate(GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_SLUG)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -765,6 +772,14 @@ fun SettingsScreen(
                                         customRingtoneUri,
                                         customRingtoneTitle
                                     )
+                                    if (isPreviewPlaying) {
+                                        previewAudioController.startPreview(
+                                            signalMode = selectedSignalMode,
+                                            soundSource = selectedSoundSource,
+                                            customRingtoneUri = customRingtoneUri,
+                                            onPreviewEnded = { isPreviewPlaying = false }
+                                        )
+                                    }
                                 },
                                 label = { Text(mode.localizedTitle(s.isEnglish)) },
                                 modifier = Modifier.testTag("signal_mode_${mode.name}")
@@ -809,6 +824,13 @@ fun SettingsScreen(
                                                 selectedSoundSource.name,
                                                 customRingtoneUri,
                                                 customRingtoneTitle
+                                            )
+                                            isPreviewPlaying = true
+                                            previewAudioController.startPreview(
+                                                signalMode = selectedSignalMode,
+                                                soundSource = selectedSoundSource,
+                                                customRingtoneUri = customRingtoneUri,
+                                                onPreviewEnded = { isPreviewPlaying = false }
                                             )
                                         }
                                         .padding(12.dp)
@@ -975,6 +997,16 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
+                                text = if (s.isEnglish) {
+                                    "Official repository: ${GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_URL}"
+                                } else {
+                                    "Официальный репозиторий: ${GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_URL}"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
                                 text = s.signingCertLabel(apkSignatureSha256),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
@@ -983,19 +1015,8 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = githubRepoSlug,
-                        onValueChange = { githubRepoSlug = it },
-                        label = { Text(s.githubRepoFieldLabel) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("github_repo_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
                     Button(
-                        onClick = { onCheckGithubUpdate(githubRepoSlug) },
+                        onClick = { onCheckGithubUpdate(GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_SLUG) },
                         enabled = !githubReleaseState.isChecking,
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier
@@ -1003,10 +1024,14 @@ fun SettingsScreen(
                             .heightIn(min = 48.dp)
                             .testTag("check_github_update_button")
                     ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = s.checkGithubUpdateBtn)
+                        Icon(Icons.Default.Refresh, contentDescription = s.checkGithubUpdateBtn)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = s.checkGithubUpdateBtn,
+                            text = if (githubReleaseState.isChecking) {
+                                if (s.isEnglish) "Checking GitHub Releases..." else "Проверка релизов на GitHub..."
+                            } else {
+                                s.checkGithubUpdateBtn
+                            },
                             textAlign = TextAlign.Center
                         )
                     }
@@ -1025,13 +1050,47 @@ fun SettingsScreen(
                         )
                     }
 
+                    if (githubReleaseState.apkDownloadUrl.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val viewIntent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse(githubReleaseState.apkDownloadUrl)
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(viewIntent) }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RadarEmerald,
+                                contentColor = Color.Black
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("download_github_apk_button")
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = "Download APK")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (s.isEnglish) {
+                                    "Download Update APK (${githubReleaseState.latestTagVersion})"
+                                } else {
+                                    "Скачать APK обновления (${githubReleaseState.latestTagVersion})"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            val targetUrl = githubReleaseState.apkDownloadUrl.ifBlank {
-                                githubReleaseState.htmlReleaseUrl.ifBlank {
-                                    "https://github.com/${githubRepoSlug.trim()}/releases"
-                                }
+                            val targetUrl = githubReleaseState.htmlReleaseUrl.ifBlank {
+                                GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL
                             }
                             val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

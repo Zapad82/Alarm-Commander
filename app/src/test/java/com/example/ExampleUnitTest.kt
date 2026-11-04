@@ -229,6 +229,19 @@ class ExampleUnitTest {
         assertFalse(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("v1.0", "1.0"))
         assertFalse(com.example.settings.GitHubUpdateChecker.isRemoteVersionNewer("0.9", "1.0"))
 
+        assertEquals(
+            "Zapad82/Alarm-Commander",
+            com.example.settings.GitHubUpdateChecker.normalizeRepoSlug("")
+        )
+        assertEquals(
+            "Zapad82/Alarm-Commander",
+            com.example.settings.GitHubUpdateChecker.normalizeRepoSlug("alarm-commander/alarm-commander-android")
+        )
+        assertEquals(
+            "Zapad82/Alarm-Commander",
+            com.example.settings.GitHubUpdateChecker.normalizeRepoSlug("https://github.com/Zapad82/Alarm-Commander/releases")
+        )
+
         assertTrue(com.example.ui.AppLanguageMode.EN.resolveIsEnglish(java.util.Locale("ru")))
         assertFalse(com.example.ui.AppLanguageMode.RU.resolveIsEnglish(java.util.Locale.ENGLISH))
         assertTrue(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale.US))
@@ -236,5 +249,16 @@ class ExampleUnitTest {
 
         assertEquals(com.example.ui.AppThemeMode.LIGHT, com.example.ui.AppThemeMode.fromStorage("LIGHT"))
         assertEquals(com.example.ui.AppThemeMode.DARK, com.example.ui.AppThemeMode.fromStorage("DARK"))
+
+        listOf(
+            com.example.data.AlarmSoundSource.SYNTH_TACTICAL_SIREN,
+            com.example.data.AlarmSoundSource.SYNTH_RADAR_SONAR,
+            com.example.data.AlarmSoundSource.SYNTH_GENTLE_CHORD
+        ).forEach { source ->
+            val pcm = com.example.alarm.AlarmAudioController.buildSynthesizedPcmSamples(source)
+            assertTrue("PCM samples for $source must not be empty", pcm.size >= 44100 * 2)
+            val peak = pcm.maxOf { kotlin.math.abs(it.toInt()) }
+            assertTrue("Peak amplitude for $source must be audible (> 20000), got $peak", peak > 20000)
+        }
     }
 }

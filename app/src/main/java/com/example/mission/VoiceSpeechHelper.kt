@@ -24,14 +24,20 @@ import java.util.Locale
  */
 class VoiceSpeechHelper(
     private val context: Context,
-    private val onStatusChanged: (isListening: Boolean, statusText: String) -> Unit,
-    private val onRmsChanged: (rmsDb: Float) -> Unit,
-    private val onSpeechResult: (recognizedText: String) -> Unit,
-    private val onFallbackActivityRequested: ((Intent) -> Boolean)? = null
+    onStatusChanged: (isListening: Boolean, statusText: String) -> Unit,
+    onRmsChanged: (rmsDb: Float) -> Unit,
+    onSpeechResult: (recognizedText: String) -> Unit,
+    onFallbackActivityRequested: ((Intent) -> Boolean)? = null
 ) {
+    private val statusCallback: (Boolean, String) -> Unit = onStatusChanged
+    private val rmsLevelCallback: (Float) -> Unit = onRmsChanged
+    private val speechResultCallback: (String) -> Unit = onSpeechResult
+    private val fallbackDialogLauncher: ((Intent) -> Boolean)? = onFallbackActivityRequested
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var isDestroyed: Boolean = false
+    private var lastPartialTranscript: String = ""
 
     fun isAvailable(): Boolean {
         return try {
@@ -50,7 +56,7 @@ class VoiceSpeechHelper(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
     }
@@ -58,12 +64,13 @@ class VoiceSpeechHelper(
     fun startListening() {
         mainHandler.post {
             if (isDestroyed) return@post
+            lastPartialTranscript = ""
             val speechIntent = buildRecognizerIntent()
 
             if (!isAvailable()) {
-                val launched = onFallbackActivityRequested?.invoke(speechIntent) == true
+                val launched = fallbackDialogLauncher?.invoke(speechIntent) == true
                 if (!launched) {
-                    onStatusChanged(
+                    statusCallback(
                         false,
                         "Системный сервис распознавания речи недоступен на этом эмуляторе — используйте контрольный ввод ниже."
                     )
@@ -76,9 +83,9 @@ class VoiceSpeechHelper(
                 if (sr == null) {
                     val created: SpeechRecognizer? = SpeechRecognizer.createSpeechRecognizer(context)
                     if (created == null) {
-                        val launched = onFallbackActivityRequested?.invoke(speechIntent) == true
+                        val launched = fallbackDialogLauncher?.invoke(speechIntent) == true
                         if (!launched) {
-                            onStatusChanged(
+                            statusCallback(
                                 false,
                                 "Системный сервис распознавания речи недоступен на этом эмуляторе — используйте контрольный ввод ниже."
                             )
@@ -92,12 +99,12 @@ class VoiceSpeechHelper(
                     runCatching { sr.cancel() }
                 }
 
-                onStatusChanged(true, "Микрофон активен: чётко произнесите фразу...")
+                statusCallback(true, "Микрофон активен: чётко произнесите фразу...")
                 sr.startListening(speechIntent)
             } catch (t: Throwable) {
-                val launched = onFallbackActivityRequested?.invoke(speechIntent) == true
+                val launched = fallbackDialogLauncher?.invoke(speechIntent) == true
                 if (!launched) {
-                    onStatusChanged(
+                    statusCallback(
                         false,
                         "Не удалось запустить SpeechRecognizer: ${t.localizedMessage ?: t.javaClass.simpleName}"
                     )
@@ -106,42 +113,63 @@ class VoiceSpeechHelper(
         }
     }
 
+    internal fun createRecognitionListenerForTest(speechIntent: Intent): RecognitionListener {
+        return createListener(speechIntent)
+    }
+
     private fun createListener(speechIntent: Intent): RecognitionListener {
         return object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 if (isDestroyed) return
-                onStatusChanged(true, "Микрофон активен: чётко произнесите фразу...")
+                this@VoiceSpeechHelper.statusCallback(true, "Микрофон активен: чётко произнесите фразу...")
             }
 
             override fun onBeginningOfSpeech() {
                 if (isDestroyed) return
-                onStatusChanged(true, "Фиксация голоса...")
+                this@VoiceSpeechHelper.statusCallback(true, "Фиксация голоса...")
             }
 
             override fun onRmsChanged(rmsdB: Float) {
                 if (isDestroyed) return
-                onRmsChanged(rmsdB.coerceIn(0f, 12f))
+                val safeRms = if (rmsdB.isNaN() || rmsdB.isInfinite()) 0f else rmsdB.coerceIn(0f, 12f)
+                this@VoiceSpeechHelper.rmsLevelCallback(safeRms)
             }
 
             override fun onBufferReceived(buffer: ByteArray?) = Unit
 
             override fun onEndOfSpeech() {
                 if (isDestroyed) return
-                onStatusChanged(false, "Обработка произнесённой фразы...")
+                this@VoiceSpeechHelper.statusCallback(false, "Обработка произнесённой фразы...")
             }
 
             override fun onError(error: Int) {
                 if (isDestroyed) return
+                // Если во время речи были получены частичные результаты, но в конце сработал таймаут паузы или ERROR_NO_MATCH,
+                // используем зафиксированную частичную фразу вместо потери ввода.
+                val partialFallback = lastPartialTranscript.trim()
+                if (partialFallback.isNotBlank() &&
+                    (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+                ) {
+                    lastPartialTranscript = ""
+                    this@VoiceSpeechHelper.statusCallback(false, "Распознано: «$partialFallback»")
+                    mainHandler.post {
+                        if (!isDestroyed) {
+                            this@VoiceSpeechHelper.speechResultCallback(partialFallback)
+                        }
+                    }
+                    return
+                }
+
                 // Если прямой биндинг к сервису заблокирован прошивкой (ERROR_CLIENT = 5 / ERROR_INSUFFICIENT_PERMISSIONS = 9),
                 // пробуем открыть стандартное системное окно голосового ввода
                 if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-                    val launched = onFallbackActivityRequested?.invoke(speechIntent) == true
+                    val launched = this@VoiceSpeechHelper.fallbackDialogLauncher?.invoke(speechIntent) == true
                     if (launched) {
-                        onStatusChanged(false, "Обработка произнесённой фразы...")
+                        this@VoiceSpeechHelper.statusCallback(false, "Обработка произнесённой фразы...")
                         return
                     }
                 }
-                onStatusChanged(
+                this@VoiceSpeechHelper.statusCallback(
                     false,
                     "Голос не распознан (код $error). Нажмите микрофон ещё раз или введите фразу."
                 )
@@ -151,15 +179,26 @@ class VoiceSpeechHelper(
                 if (isDestroyed) return
                 val matches = runCatching {
                     results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                }.getOrNull()
-                val best = matches?.firstOrNull().orEmpty().trim()
-                onStatusChanged(false, if (best.isNotBlank()) "Распознано: «$best»" else "Пустой результат")
-                if (best.isNotBlank()) {
+                }.getOrNull().orEmpty().map { it.trim() }.filter { it.isNotBlank() }
+
+                val primaryDisplay = matches.firstOrNull().orEmpty().ifBlank { lastPartialTranscript.trim() }
+                val combinedTranscript = if (matches.isNotEmpty()) {
+                    matches.joinToString(" ")
+                } else {
+                    lastPartialTranscript.trim()
+                }
+                lastPartialTranscript = ""
+
+                this@VoiceSpeechHelper.statusCallback(
+                    false,
+                    if (primaryDisplay.isNotBlank()) "Распознано: «$primaryDisplay»" else "Пустой результат"
+                )
+                if (combinedTranscript.isNotBlank()) {
                     // Откладываем передачу результата на следующий такт главного цикла,
                     // чтобы завершение миссии и закрытие экрана не вызвали destroy() внутри колбэка Binder!
                     mainHandler.post {
                         if (!isDestroyed) {
-                            onSpeechResult(best)
+                            this@VoiceSpeechHelper.speechResultCallback(combinedTranscript)
                         }
                     }
                 }
@@ -173,7 +212,8 @@ class VoiceSpeechHelper(
                         ?.firstOrNull()
                 }.getOrNull().orEmpty().trim()
                 if (partial.isNotBlank()) {
-                    onStatusChanged(true, "Слышу: «$partial»...")
+                    lastPartialTranscript = partial
+                    this@VoiceSpeechHelper.statusCallback(true, "Слышу: «$partial»...")
                 }
             }
 

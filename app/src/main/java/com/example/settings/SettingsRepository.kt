@@ -36,7 +36,7 @@ data class CommanderSettingsState(
     // Язык ("SYSTEM", "RU", "EN") и тема ("DARK", "LIGHT", "SYSTEM") + репозиторий обновлений GitHub
     val languageMode: String = "SYSTEM",
     val themeMode: String = "DARK",
-    val githubRepoSlug: String = "alarm-commander/alarm-commander-android",
+    val githubRepoSlug: String = GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_SLUG,
     // Поля сохранения активной сессии для восстановления после убийства процесса (process death)
     val activeAlarmId: Long = -1L,
     val activeAlarmState: AlarmState = AlarmState.DISMISSED,
@@ -96,7 +96,7 @@ class SettingsRepository(private val context: Context) {
             customRingtoneTitle = prefs[Keys.CUSTOM_RINGTONE_TITLE] ?: "",
             languageMode = prefs[Keys.LANGUAGE_MODE] ?: "SYSTEM",
             themeMode = prefs[Keys.THEME_MODE] ?: "DARK",
-            githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "alarm-commander/alarm-commander-android",
+            githubRepoSlug = GitHubUpdateChecker.normalizeRepoSlug(prefs[Keys.GITHUB_REPO_SLUG]),
             activeAlarmId = prefs[Keys.ACTIVE_ALARM_ID] ?: -1L,
             activeAlarmState = parsedState,
             activeEscalationStage = prefs[Keys.ACTIVE_ESCALATION_STAGE] ?: 0,
@@ -123,7 +123,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setGithubRepoSlug(slug: String) {
         context.dataStore.edit {
-            it[Keys.GITHUB_REPO_SLUG] = slug.trim().ifEmpty { "alarm-commander/alarm-commander-android" }
+            it[Keys.GITHUB_REPO_SLUG] = GitHubUpdateChecker.normalizeRepoSlug(slug)
         }
     }
 

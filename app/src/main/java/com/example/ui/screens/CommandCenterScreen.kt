@@ -59,6 +59,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -778,6 +779,13 @@ fun AlarmEditorDialog(
         )
     }
 
+    val editorPreviewController = remember { AlarmAudioController(context) }
+    DisposableEffect(Unit) {
+        onDispose {
+            editorPreviewController.stopAll()
+        }
+    }
+
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -975,7 +983,14 @@ fun AlarmEditorDialog(
                         AlarmSoundSource.entries.forEach { src ->
                             FilterChip(
                                 selected = soundSource == src,
-                                onClick = { soundSource = src },
+                                onClick = {
+                                    soundSource = src
+                                    editorPreviewController.startPreview(
+                                        signalMode = signalMode,
+                                        soundSource = soundSource,
+                                        customRingtoneUri = customRingtoneUri
+                                    )
+                                },
                                 label = { Text(src.localizedShort(s.isEnglish)) }
                             )
                         }

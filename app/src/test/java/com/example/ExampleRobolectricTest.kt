@@ -34,4 +34,39 @@ class ExampleRobolectricTest {
             report.checks.all { it.passed }
         )
     }
+
+    @Test
+    fun `voiceSpeechHelper handles onRmsChanged and onResults without StackOverflowError`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        var lastRms = -1f
+        var lastStatus = ""
+        var recognizedOutput = ""
+
+        val helper = com.example.mission.VoiceSpeechHelper(
+            context = context,
+            onStatusChanged = { _, status -> lastStatus = status },
+            onRmsChanged = { rms -> lastRms = rms },
+            onSpeechResult = { text -> recognizedOutput = text }
+        )
+        val listener = helper.createRecognitionListenerForTest(helper.buildRecognizerIntent())
+
+        listener.onRmsChanged(7.5f)
+        assertEquals(7.5f, lastRms, 0.01f)
+
+        listener.onRmsChanged(99f)
+        assertEquals(12f, lastRms, 0.01f)
+
+        val bundle = android.os.Bundle().apply {
+            putStringArrayList(
+                android.speech.SpeechRecognizer.RESULTS_RECOGNITION,
+                arrayListOf("Я полностью проснулся и готов к действию")
+            )
+        }
+        listener.onResults(bundle)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertTrue(lastStatus.contains("Я полностью проснулся"))
+        assertEquals("Я полностью проснулся и готов к действию", recognizedOutput)
+        helper.release()
+    }
 }
