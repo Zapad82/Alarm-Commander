@@ -80,9 +80,20 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
             val seeded = repository.ensureSeededDefaults()
             seeded.filter { it.enabled }.forEach { scheduler.scheduleAlarm(it) }
 
-            // Проверяем, не была ли прервана активная тревога из-за Process Death
+            // Проверяем, не была ли прервана недавняя (не старше 10 минут) реальная тревога из-за Process Death
             val snap = settingsRepository.getSnapshot()
+            val nowMs = System.currentTimeMillis()
+            if (snap.antiReturnAlarmId > 0L &&
+                (snap.antiReturnAlarmId == 999L || nowMs > snap.antiReturnDeadlineEpochMs + 60_000L)
+            ) {
+                scheduler.cancelAntiReturnCheck(snap.antiReturnAlarmId)
+                settingsRepository.clearAntiReturnSession()
+            }
+
+            val sessionAgeMs = nowMs - snap.activeSessionStartEpochMs
             if (snap.activeAlarmId > 0L &&
+                snap.activeAlarmId != 999L &&
+                sessionAgeMs in 1..600_000L &&
                 snap.activeAlarmState in setOf(
                     AlarmState.RINGING,
                     AlarmState.ESCALATING,
@@ -91,7 +102,14 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
                 ) &&
                 !AlarmService.activeUiState.value.isActive
             ) {
-                triggerCombatTestAlarm(snap.activeAlarmId, isSunrise = false)
+                val recoverIntent = Intent(appContext, AlarmService::class.java).apply {
+                    action = AlarmService.ACTION_START_ALARM
+                    putExtra(AlarmScheduler.EXTRA_ALARM_ID, snap.activeAlarmId)
+                    putExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, false)
+                }
+                ContextCompat.startForegroundService(appContext, recoverIntent)
+            } else if (snap.activeAlarmId > 0L && !AlarmService.activeUiState.value.isActive) {
+                settingsRepository.clearActiveAlarmSession()
             }
         }
     }
@@ -181,6 +199,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
                 AlarmService.ACTION_START_ALARM
             }
             putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, true)
         }
         ContextCompat.startForegroundService(appContext, intent)
     }

@@ -19,8 +19,8 @@ data class GitHubReleaseCheckResult(
     val latestTagVersion: String = BuildConfig.VERSION_NAME,
     val releasePageUrl: String = GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL,
     val apkDownloadUrl: String = "",
-    val statusMessageRu: String = "Нажмите для проверки актуального релиза на GitHub (Zapad82/Alarm-Commander)",
-    val statusMessageEn: String = "Tap to check the latest release on GitHub (Zapad82/Alarm-Commander)"
+    val statusMessageRu: String = "Страница релизов: https://github.com/Zapad82/Alarm-Commander/releases",
+    val statusMessageEn: String = "Releases page: https://github.com/Zapad82/Alarm-Commander/releases"
 ) {
     val isUpdateAvailable: Boolean get() = updateAvailable
     val htmlReleaseUrl: String get() = releasePageUrl
@@ -29,7 +29,7 @@ data class GitHubReleaseCheckResult(
 
 /**
  * Модуль проверки обновлений через GitHub Releases API и верификации собственной подписи APK (SHA-256).
- * Официальный репозиторий приложения: https://github.com/Zapad82/Alarm-Commander
+ * Официальная страница релизов: https://github.com/Zapad82/Alarm-Commander/releases
  */
 object GitHubUpdateChecker {
 
@@ -46,28 +46,17 @@ object GitHubUpdateChecker {
     }
 
     /**
-     * Приводит любой ввод или сохранённое значение к формату owner/repo,
-     * автоматически заменяя старую заглушку на официальный репозиторий Zapad82/Alarm-Commander.
+     * Всегда приводит сохранённое значение или URL к официальному репозиторию Zapad82/Alarm-Commander.
      */
     fun normalizeRepoSlug(raw: String?): String {
         val trimmed = raw?.trim().orEmpty()
-        if (trimmed.isBlank() || trimmed.equals("alarm-commander/alarm-commander-android", ignoreCase = true)) {
+        if (trimmed.isBlank() ||
+            trimmed.equals("alarm-commander/alarm-commander-android", ignoreCase = true) ||
+            trimmed.contains("Zapad82/Alarm-Commander", ignoreCase = true)
+        ) {
             return OFFICIAL_GITHUB_REPO_SLUG
         }
-        val cleaned = trimmed
-            .removePrefix("https://github.com/")
-            .removePrefix("http://github.com/")
-            .removePrefix("github.com/")
-            .removeSuffix(".git")
-            .trim('/')
-            .split("/")
-            .take(2)
-            .joinToString("/")
-        return if (cleaned.contains("/") && cleaned.split("/").size == 2) {
-            cleaned
-        } else {
-            OFFICIAL_GITHUB_REPO_SLUG
-        }
+        return OFFICIAL_GITHUB_REPO_SLUG
     }
 
     /**
@@ -112,69 +101,56 @@ object GitHubUpdateChecker {
         currentVersionName: String = BuildConfig.VERSION_NAME
     ): GitHubReleaseCheckResult = withContext(Dispatchers.IO) {
         val cleanedRepo = normalizeRepoSlug(repoSlug)
-        val fallbackPageUrl = "https://github.com/$cleanedRepo/releases"
+        val releasesPageUrl = OFFICIAL_GITHUB_RELEASES_URL
 
-        val apiUrl = "https://api.github.com/repos/$cleanedRepo/releases/latest"
+        val latestApiUrl = "https://api.github.com/repos/$cleanedRepo/releases/latest"
+        val listApiUrl = "https://api.github.com/repos/$cleanedRepo/releases?per_page=5"
+
         return@withContext try {
-            val request = Request.Builder()
-                .url(apiUrl)
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "AlarmCommander-Android/$currentVersionName")
-                .get()
-                .build()
+            var releaseBody = fetchApiBody(latestApiUrl, currentVersionName)
+            if (releaseBody.isBlank()) {
+                // Если последний релиз отмечен как pre-release, /releases/latest может вернуть 404 —
+                // запрашиваем общий список релизов с /releases
+                releaseBody = fetchApiBody(listApiUrl, currentVersionName)
+            }
 
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (response.isSuccessful && body.isNotBlank()) {
-                    val tagName = extractJsonField(body, "tag_name").ifBlank { "v$currentVersionName" }
-                    val htmlUrl = extractReleaseHtmlUrl(body).ifBlank { fallbackPageUrl }
-                    val apkAssetUrl = extractApkDownloadUrl(body)
-                    val normalizedRemote = tagName.removePrefix("v").removePrefix("V").trim()
-                    val normalizedLocal = currentVersionName.removePrefix("v").removePrefix("V").trim()
-                    val isNewer = isRemoteVersionNewer(normalizedRemote, normalizedLocal)
+            if (releaseBody.isNotBlank()) {
+                val tagName = extractJsonField(releaseBody, "tag_name").ifBlank { "v$currentVersionName" }
+                val apkAssetUrl = extractApkDownloadUrl(releaseBody)
+                val normalizedRemote = tagName.removePrefix("v").removePrefix("V").trim()
+                val normalizedLocal = currentVersionName.removePrefix("v").removePrefix("V").trim()
+                val isNewer = isRemoteVersionNewer(normalizedRemote, normalizedLocal)
 
-                    GitHubReleaseCheckResult(
-                        isChecking = false,
-                        checked = true,
-                        updateAvailable = isNewer,
-                        currentVersion = currentVersionName,
-                        latestTagVersion = tagName,
-                        releasePageUrl = htmlUrl,
-                        apkDownloadUrl = apkAssetUrl,
-                        statusMessageRu = if (isNewer) {
-                            "Доступна новая версия $tagName! Нажмите кнопку ниже, чтобы скачать APK и установить обновление поверх v$currentVersionName."
-                        } else {
-                            "Установлена актуальная версия (v$currentVersionName, последний релиз на GitHub: $tagName)."
-                        },
-                        statusMessageEn = if (isNewer) {
-                            "New version $tagName available! Tap the button below to download the APK and update in-place over v$currentVersionName."
-                        } else {
-                            "You have the latest version installed (v$currentVersionName, latest GitHub release: $tagName)."
-                        }
-                    )
-                } else if (response.code == 404) {
-                    GitHubReleaseCheckResult(
-                        isChecking = false,
-                        checked = true,
-                        updateAvailable = false,
-                        currentVersion = currentVersionName,
-                        latestTagVersion = "v$currentVersionName",
-                        releasePageUrl = fallbackPageUrl,
-                        statusMessageRu = "Репозиторий $cleanedRepo готов к публикации релиза (v$currentVersionName).",
-                        statusMessageEn = "Repository $cleanedRepo is ready for publishing a release (v$currentVersionName)."
-                    )
-                } else {
-                    GitHubReleaseCheckResult(
-                        isChecking = false,
-                        checked = true,
-                        updateAvailable = false,
-                        currentVersion = currentVersionName,
-                        latestTagVersion = "v$currentVersionName",
-                        releasePageUrl = fallbackPageUrl,
-                        statusMessageRu = "Ответ GitHub API: HTTP ${response.code}. Вы можете открыть страницу релизов напрямую.",
-                        statusMessageEn = "GitHub API response: HTTP ${response.code}. You can open the Releases page directly."
-                    )
-                }
+                GitHubReleaseCheckResult(
+                    isChecking = false,
+                    checked = true,
+                    updateAvailable = isNewer,
+                    currentVersion = currentVersionName,
+                    latestTagVersion = tagName,
+                    releasePageUrl = releasesPageUrl,
+                    apkDownloadUrl = apkAssetUrl,
+                    statusMessageRu = if (isNewer) {
+                        "Доступна новая версия $tagName! Скачайте APK кнопкой ниже или откройте $releasesPageUrl."
+                    } else {
+                        "Установлена актуальная версия v$currentVersionName (последний релиз на GitHub: $tagName)."
+                    },
+                    statusMessageEn = if (isNewer) {
+                        "New version $tagName available! Download the APK below or open $releasesPageUrl."
+                    } else {
+                        "You have the latest version installed v$currentVersionName (latest GitHub release: $tagName)."
+                    }
+                )
+            } else {
+                GitHubReleaseCheckResult(
+                    isChecking = false,
+                    checked = true,
+                    updateAvailable = false,
+                    currentVersion = currentVersionName,
+                    latestTagVersion = "v$currentVersionName",
+                    releasePageUrl = releasesPageUrl,
+                    statusMessageRu = "Страница релизов: $releasesPageUrl (установлена v$currentVersionName).",
+                    statusMessageEn = "Releases page: $releasesPageUrl (installed v$currentVersionName)."
+                )
             }
         } catch (e: Exception) {
             GitHubReleaseCheckResult(
@@ -183,23 +159,42 @@ object GitHubUpdateChecker {
                 updateAvailable = false,
                 currentVersion = currentVersionName,
                 latestTagVersion = "v$currentVersionName",
-                releasePageUrl = fallbackPageUrl,
-                statusMessageRu = "Проверка через сеть недоступна (${e.javaClass.simpleName}). Откройте страницу релизов в браузере.",
-                statusMessageEn = "Network check unavailable (${e.javaClass.simpleName}). Open the Releases page in browser."
+                releasePageUrl = releasesPageUrl,
+                statusMessageRu = "Проверка через сеть недоступна (${e.javaClass.simpleName}). Откройте $releasesPageUrl в браузере.",
+                statusMessageEn = "Network check unavailable (${e.javaClass.simpleName}). Open $releasesPageUrl in browser."
             )
         }
     }
 
+    private fun fetchApiBody(url: String, currentVersionName: String): String {
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "AlarmCommander-Android/$currentVersionName")
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            return if (response.isSuccessful && body.isNotBlank() && body.trim() != "[]") {
+                body
+            } else {
+                ""
+            }
+        }
+    }
+
     internal fun extractReleaseHtmlUrl(json: String): String {
-        val tagReleaseRegex = Regex(""""html_url"\s*:\s*"(https://github\.com/[^"]+/releases/tag/[^"]*)"""")
+        val tagReleaseRegex = Regex(""""html_url"\s*:\s*"(https://github\.com/Zapad82/Alarm-Commander/releases/tag/[^"]*)"""")
         return tagReleaseRegex.find(json)?.groupValues?.getOrNull(1)
-            ?: extractJsonField(json, "html_url")
+            ?: OFFICIAL_GITHUB_RELEASES_URL
     }
 
     internal fun extractApkDownloadUrl(json: String): String {
-        val apkRegex = Regex(""""browser_download_url"\s*:\s*"([^"]*\.apk)"""", RegexOption.IGNORE_CASE)
+        val apkRegex = Regex(""""browser_download_url"\s*:\s*"(https://github\.com/Zapad82/Alarm-Commander/releases/download/[^"]*\.apk)"""", RegexOption.IGNORE_CASE)
         return apkRegex.find(json)?.groupValues?.getOrNull(1)
-            ?: extractJsonField(json, "browser_download_url")
+            ?: Regex(""""browser_download_url"\s*:\s*"([^"]*\.apk)"""", RegexOption.IGNORE_CASE)
+                .find(json)?.groupValues?.getOrNull(1)
+                .orEmpty()
     }
 
     internal fun extractJsonField(json: String, key: String): String {

@@ -987,7 +987,17 @@ fun SettingsScreen(
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val viewIntent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse(GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL)
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(viewIntent) }
+                            }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -998,11 +1008,12 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (s.isEnglish) {
-                                    "Official repository: ${GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_URL}"
+                                    "Releases: ${GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL}"
                                 } else {
-                                    "Официальный репозиторий: ${GitHubUpdateChecker.OFFICIAL_GITHUB_REPO_URL}"
+                                    "Релизы: ${GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL}"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1089,10 +1100,10 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            val targetUrl = githubReleaseState.htmlReleaseUrl.ifBlank {
-                                GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL
-                            }
-                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                            val viewIntent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse(GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL)
+                            ).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             runCatching { context.startActivity(viewIntent) }
@@ -1106,7 +1117,7 @@ fun SettingsScreen(
                         Icon(Icons.Default.OpenInNew, contentDescription = s.openGithubReleaseBtn)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = s.openGithubReleaseBtn,
+                            text = "${s.openGithubReleaseBtn} (Zapad82/Alarm-Commander)",
                             textAlign = TextAlign.Center
                         )
                     }

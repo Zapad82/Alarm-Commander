@@ -26,6 +26,7 @@ class AlarmScheduler(private val context: Context) {
         const val EXTRA_ALARM_ID = "extra_alarm_id"
         const val EXTRA_IS_SUNRISE = "extra_is_sunrise"
         const val EXTRA_IS_ANTI_RETURN = "extra_is_anti_return"
+        const val EXTRA_IS_TEST_RUN = "extra_is_test_run"
 
         /**
          * Вычисляет ближайшее время срабатывания в миллисекундах (epoch ms).
@@ -211,7 +212,8 @@ class AlarmScheduler(private val context: Context) {
     fun cancelAlarm(alarmId: Long) {
         listOf(
             requestCodeForT0(alarmId) to ACTION_TRIGGER_ALARM,
-            requestCodeForSunrise(alarmId) to ACTION_PRE_ALARM_SUNRISE
+            requestCodeForSunrise(alarmId) to ACTION_PRE_ALARM_SUNRISE,
+            requestCodeForAntiReturn(alarmId) to ACTION_ANTI_RETURN_CHECK
         ).forEach { (reqCode, act) ->
             val intent = Intent(context, AlarmReceiver::class.java).apply { action = act }
             val pending = PendingIntent.getBroadcast(

@@ -87,6 +87,8 @@ class AlarmService : Service() {
     private var antiReturnCountdownJob: Job? = null
     @Volatile
     private var isVoiceListeningMuted: Boolean = false
+    @Volatile
+    private var isCurrentSessionTestRun: Boolean = false
 
     companion object {
         const val CHANNEL_ID_ALARM = "alarm_commander_critical_channel"
@@ -151,6 +153,7 @@ class AlarmService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_START_ALARM
         val alarmId = intent?.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L) ?: -1L
+        val isTestRun = intent?.getBooleanExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, false) ?: false
 
         serviceScope.launch {
             when (action) {
@@ -161,24 +164,55 @@ class AlarmService : Service() {
                     startAntiReturnVerification(alarmId)
                 }
                 ACTION_START_SUNRISE -> {
-                    startAlarmOrSunriseSession(alarmId = alarmId, isSunrise = true)
+                    startAlarmOrSunriseSession(
+                        alarmId = alarmId,
+                        isSunrise = true,
+                        isTestRun = isTestRun
+                    )
                 }
                 else -> {
-                    // Если сервис перезапущен системой после Process Death (intent == null),
-                    // восстанавливаем активный alarmId из DataStore
-                    val effectiveId = if (alarmId > 0L) {
-                        alarmId
+                    if (alarmId > 0L) {
+                        startAlarmOrSunriseSession(
+                            alarmId = alarmId,
+                            isSunrise = false,
+                            isTestRun = isTestRun
+                        )
                     } else {
-                        settingsRepository.getSnapshot().activeAlarmId
+                        // Если сервис перезапущен системой после Process Death (intent == null),
+                        // восстанавливаем только недавнюю (не старше 10 минут) реальную тревогу
+                        val snap = settingsRepository.getSnapshot()
+                        val ageMs = System.currentTimeMillis() - snap.activeSessionStartEpochMs
+                        if (snap.activeAlarmId > 0L &&
+                            snap.activeAlarmId != 999L &&
+                            ageMs in 1..600_000L &&
+                            snap.activeAlarmState in setOf(
+                                AlarmState.RINGING,
+                                AlarmState.ESCALATING,
+                                AlarmState.MISSION_IN_PROGRESS,
+                                AlarmState.OVERDUE
+                            )
+                        ) {
+                            startAlarmOrSunriseSession(
+                                alarmId = snap.activeAlarmId,
+                                isSunrise = false,
+                                isTestRun = false
+                            )
+                        } else {
+                            settingsRepository.clearActiveAlarmSession()
+                            stopSelf()
+                        }
                     }
-                    startAlarmOrSunriseSession(alarmId = effectiveId, isSunrise = false)
                 }
             }
         }
         return START_STICKY
     }
 
-    private suspend fun startAlarmOrSunriseSession(alarmId: Long, isSunrise: Boolean) {
+    private suspend fun startAlarmOrSunriseSession(
+        alarmId: Long,
+        isSunrise: Boolean,
+        isTestRun: Boolean = false
+    ) {
         val savedSettings = settingsRepository.getSnapshot()
         val alarm = (if (alarmId > 0L) repository.getAlarmById(alarmId) else null)
             ?: AlarmEntity(
@@ -206,17 +240,24 @@ class AlarmService : Service() {
         )
         if (!started) return
 
+        isCurrentSessionTestRun = isTestRun || alarm.id == 999L
+        scheduler.cancelAntiReturnCheck(alarm.id)
+        settingsRepository.clearAntiReturnSession()
+
         acquireWakeLock()
         startForegroundWithFullScreenNotification(alarm, isSunrise)
 
-        // Перепланируем следующий цикл, если будильник периодический
-        if (!isSunrise && alarm.id != 999L && alarm.daysOfWeek.isNotEmpty()) {
+        // Перепланируем следующий цикл, если это реальный периодический будильник (не ручной тест)
+        if (!isSunrise && !isCurrentSessionTestRun && alarm.id != 999L && alarm.daysOfWeek.isNotEmpty()) {
             scheduler.scheduleAlarm(alarm)
         }
 
         val missions = buildMissionList(alarm)
         val coordinator = MissionChainCoordinator(missions)
-        val initialProgress = if (savedSettings.activeAlarmId == alarm.id && savedSettings.activeMissionIndex > 0) {
+        val initialProgress = if (!isCurrentSessionTestRun &&
+            savedSettings.activeAlarmId == alarm.id &&
+            savedSettings.activeMissionIndex > 0
+        ) {
             coordinator.setMissionIndex(savedSettings.activeMissionIndex)
         } else {
             coordinator.startCurrent()
@@ -224,13 +265,17 @@ class AlarmService : Service() {
         missionCoordinator = coordinator
 
         val initialSnap = escalationEngine.evaluateTick()
-        settingsRepository.persistActiveAlarmSession(
-            alarmId = alarm.id,
-            state = initialSnap.state,
-            escalationStage = initialSnap.stage,
-            missionIndex = coordinator.currentMissionIndex(),
-            sessionStartEpochMs = System.currentTimeMillis()
-        )
+        if (!isCurrentSessionTestRun) {
+            settingsRepository.persistActiveAlarmSession(
+                alarmId = alarm.id,
+                state = initialSnap.state,
+                escalationStage = initialSnap.stage,
+                missionIndex = coordinator.currentMissionIndex(),
+                sessionStartEpochMs = System.currentTimeMillis()
+            )
+        } else {
+            settingsRepository.clearActiveAlarmSession()
+        }
 
         repository.logEvent(
             alarmId = alarm.id,
@@ -336,13 +381,15 @@ class AlarmService : Service() {
                         state = snap.state,
                         details = snap.statusDescriptionRu
                     )
-                    settingsRepository.persistActiveAlarmSession(
-                        alarmId = alarm.id,
-                        state = snap.state,
-                        escalationStage = snap.stage,
-                        missionIndex = missionCoordinator?.currentMissionIndex() ?: 0,
-                        sessionStartEpochMs = System.currentTimeMillis()
-                    )
+                    if (!isCurrentSessionTestRun) {
+                        settingsRepository.persistActiveAlarmSession(
+                            alarmId = alarm.id,
+                            state = snap.state,
+                            escalationStage = snap.stage,
+                            missionIndex = missionCoordinator?.currentMissionIndex() ?: 0,
+                            sessionStartEpochMs = System.currentTimeMillis()
+                        )
+                    }
                 }
 
                 // Если наступила просрочка (OVERDUE) — вызываем резервные каналы один раз
@@ -459,8 +506,10 @@ class AlarmService : Service() {
     }
 
     private suspend fun onAllMissionsCompleted(alarm: AlarmEntity, summary: String) {
-        // Если включён анти-возврат в кровать, планируем проверку через antiReturnDelayMinutes
-        if (alarm.antiReturnEnabled) {
+        val wasTestRun = isCurrentSessionTestRun || alarm.id == 999L
+        // Если включён анти-возврат в кровать и это НЕ ручной тестовый запуск,
+        // планируем проверку через antiReturnDelayMinutes
+        if (alarm.antiReturnEnabled && !wasTestRun) {
             val checkAtMs = scheduler.scheduleAntiReturnCheck(alarm.id, alarm.antiReturnDelayMinutes)
             settingsRepository.persistAntiReturnSession(alarm.id, checkAtMs)
             repository.logEvent(
@@ -470,10 +519,13 @@ class AlarmService : Service() {
                 state = AlarmState.DISMISSED,
                 details = "Запланирован контроль анти-возврата через ${alarm.antiReturnDelayMinutes} мин"
             )
+        } else {
+            scheduler.cancelAntiReturnCheck(alarm.id)
+            settingsRepository.clearAntiReturnSession()
         }
 
-        // Если будильник однократный (дни не выбраны), выключаем переключатель enabled
-        if (alarm.id != 999L && alarm.daysOfWeek.isEmpty()) {
+        // Если реальный будильник однократный (дни не выбраны), выключаем переключатель enabled
+        if (!wasTestRun && alarm.daysOfWeek.isEmpty()) {
             repository.saveAlarm(alarm.copy(enabled = false, currentSnoozeCount = 0))
         }
 
@@ -547,6 +599,7 @@ class AlarmService : Service() {
         )
 
         val settingsSnap = settingsRepository.getSnapshot()
+        settingsRepository.clearAntiReturnSession()
         val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
         audioController.startOrUpdate(
             stage = 1,

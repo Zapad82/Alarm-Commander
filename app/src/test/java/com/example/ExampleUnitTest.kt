@@ -241,11 +241,19 @@ class ExampleUnitTest {
             "Zapad82/Alarm-Commander",
             com.example.settings.GitHubUpdateChecker.normalizeRepoSlug("https://github.com/Zapad82/Alarm-Commander/releases")
         )
+        assertEquals(
+            "https://github.com/Zapad82/Alarm-Commander/releases",
+            com.example.settings.GitHubUpdateChecker.OFFICIAL_GITHUB_RELEASES_URL
+        )
+        assertEquals(
+            "https://github.com/Zapad82/Alarm-Commander/releases",
+            com.example.settings.GitHubUpdateChecker.extractReleaseHtmlUrl("""{"author":{"html_url":"https://github.com/Zapad82"}}""")
+        )
 
-        assertTrue(com.example.ui.AppLanguageMode.EN.resolveIsEnglish(java.util.Locale("ru")))
+        assertTrue(com.example.ui.AppLanguageMode.EN.resolveIsEnglish(java.util.Locale.forLanguageTag("ru")))
         assertFalse(com.example.ui.AppLanguageMode.RU.resolveIsEnglish(java.util.Locale.ENGLISH))
         assertTrue(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale.US))
-        assertFalse(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale("ru", "RU")))
+        assertFalse(com.example.ui.AppLanguageMode.SYSTEM.resolveIsEnglish(java.util.Locale.forLanguageTag("ru-RU")))
 
         assertEquals(com.example.ui.AppThemeMode.LIGHT, com.example.ui.AppThemeMode.fromStorage("LIGHT"))
         assertEquals(com.example.ui.AppThemeMode.DARK, com.example.ui.AppThemeMode.fromStorage("DARK"))

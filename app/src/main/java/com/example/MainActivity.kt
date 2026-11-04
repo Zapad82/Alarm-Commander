@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureLockscreenWakeFlags()
+        updateLockscreenWakeFlags(AlarmService.activeUiState.value.isActive)
         enableEdgeToEdge()
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
@@ -86,6 +86,9 @@ class MainActivity : ComponentActivity() {
                 viewModel = viewModel,
                 onSetNfcReaderActive = { active ->
                     if (active) enableNfcReaderIfAvailable() else disableNfcReader()
+                },
+                onSetLockscreenWakeActive = { active ->
+                    updateLockscreenWakeFlags(active)
                 }
             )
         }
@@ -93,6 +96,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateLockscreenWakeFlags(AlarmService.activeUiState.value.isActive)
         viewModel.refreshPermissions()
     }
 
@@ -101,21 +105,30 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
-    private fun configureLockscreenWakeFlags() {
+    private fun updateLockscreenWakeFlags(active: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            km?.requestDismissKeyguard(this, null)
+            setShowWhenLocked(active)
+            setTurnScreenOn(active)
+            if (active) {
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                km?.requestDismissKeyguard(this, null)
+            }
         } else {
             @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            )
+            val legacyFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            if (active) {
+                window.addFlags(legacyFlags)
+            } else {
+                window.clearFlags(legacyFlags)
+            }
         }
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (active) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun enableNfcReaderIfAvailable() {
@@ -152,7 +165,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AlarmCommanderApp(
     viewModel: AlarmCommanderViewModel,
-    onSetNfcReaderActive: (Boolean) -> Unit = {}
+    onSetNfcReaderActive: (Boolean) -> Unit = {},
+    onSetLockscreenWakeActive: (Boolean) -> Unit = {}
 ) {
     val alarms by viewModel.alarmsFlow.collectAsStateWithLifecycle()
     val logs by viewModel.logsFlow.collectAsStateWithLifecycle()
@@ -187,6 +201,14 @@ fun AlarmCommanderApp(
             val s = LocalAppStrings.current
             val snackbarHostState = remember { SnackbarHostState() }
             var currentTab by remember { mutableIntStateOf(0) }
+
+            // Включаем показ поверх экрана блокировки ТОЛЬКО когда реально звенит будильник или идет проверка Анти-возврата
+            DisposableEffect(activeAlarmState.isActive) {
+                onSetLockscreenWakeActive(activeAlarmState.isActive)
+                onDispose {
+                    onSetLockscreenWakeActive(false)
+                }
+            }
 
             // Энергоэффективное управление NFC: включаем антенну NFC только на время активной миссии NFC
             val shouldEnableNfc = activeAlarmState.isActive &&
