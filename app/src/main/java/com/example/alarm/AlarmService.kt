@@ -85,6 +85,8 @@ class AlarmService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
     private var antiReturnCountdownJob: Job? = null
+    @Volatile
+    private var isVoiceListeningMuted: Boolean = false
 
     companion object {
         const val CHANNEL_ID_ALARM = "alarm_commander_critical_channel"
@@ -124,6 +126,14 @@ class AlarmService : Service() {
 
         fun confirmAntiReturnAwake() {
             instance?.handleAntiReturnConfirmed()
+        }
+
+        fun setVoiceListeningMute(muted: Boolean) {
+            val svc = instance ?: return
+            svc.isVoiceListeningMuted = muted
+            if (muted) {
+                svc.audioController.stopAll()
+            }
         }
     }
 
@@ -300,6 +310,9 @@ class AlarmService : Service() {
                             details = snap.statusDescriptionRu
                         )
                     }
+                } else if (isVoiceListeningMuted) {
+                    // Временно приглушаем динамик и вибро, пока активен микрофон распознавания речи
+                    audioController.stopAll()
                 } else {
                     val settingsSnap = settingsRepository.getSnapshot()
                     val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
@@ -590,6 +603,7 @@ class AlarmService : Service() {
     }
 
     private fun stopCurrentSession(reason: String, finalState: AlarmState) {
+        isVoiceListeningMuted = false
         tickerJob?.cancel()
         antiReturnCountdownJob?.cancel()
         audioController.stopAll()

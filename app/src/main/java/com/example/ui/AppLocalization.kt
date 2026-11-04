@@ -577,11 +577,33 @@ fun String.localizeRuntimeText(isEnglish: Boolean): String {
         "Нажмите кнопку микрофона и произнесите фразу вслух" -> return "Tap the microphone button and speak the phrase aloud"
         "Системный сервис распознавания речи недоступен на этом эмуляторе — используйте контрольный ввод ниже." ->
             return "System speech recognition is unavailable on this device — use the fallback input below."
+        "Открыто системное окно голосового ввода..." -> return "System voice input dialog opened..."
+        "Системный сервис распознавания речи не найден на устройстве — используйте ввод текста ниже." ->
+            return "System speech recognition service not found on device — use text input below."
+        "Подключение к микрофону..." -> return "Connecting to microphone..."
         "Микрофон активен: чётко произнесите фразу..." -> return "Microphone active: speak the phrase clearly..."
         "Фиксация голоса..." -> return "Capturing voice..."
         "Обработка произнесённой фразы..." -> return "Processing spoken phrase..."
         "Пустой результат" -> return "Empty speech result"
         "Речь не распознана. Повторите фразу громче." -> return "Speech not recognized. Repeat the phrase louder."
+        "Речь не распознана. Попробуйте снова или введите текст вручную." ->
+            return "Speech not recognized. Try again or enter text manually."
+        "Голосовой ввод отменен. Нажмите кнопку микрофона или введите фразу ниже." ->
+            return "Voice input cancelled. Tap the microphone button or enter the phrase below."
+        "Доступ к микрофону отклонен. Разрешите микрофон или введите фразу вручную." ->
+            return "Microphone permission denied. Grant microphone access or enter the phrase manually."
+        "Ожидание повторного нажатия микрофона" -> return "Waiting for microphone tap"
+        "Нет доступа к микрофону. Выдайте разрешение RECORD_AUDIO." ->
+            return "No microphone access. Please grant RECORD_AUDIO permission."
+        "Ошибка захвата аудио. Попробуйте снова." -> return "Audio capture error. Please try again."
+        "Голос не услышан. Нажмите микрофон и произнесите фразу громче." ->
+            return "No speech heard. Tap the microphone and speak louder."
+        "Слова не распознаны. Повторите фразу чётче или введите вручную." ->
+            return "Words not recognized. Repeat clearly or type manually."
+        "Сервис распознавания занят. Подождите секунду и нажмите снова." ->
+            return "Speech recognizer is busy. Wait a second and tap again."
+        "Нет сети для онлайн-распознавания речи — используйте ввод вручную." ->
+            return "No network for online speech recognition — use manual input below."
         "Резервная тревога активирована" -> return "Backup alert triggered"
         "Настройки сохранены / Settings saved" -> return "Settings saved"
         "Журнал очищен / Logs cleared" -> return "Logs cleared"

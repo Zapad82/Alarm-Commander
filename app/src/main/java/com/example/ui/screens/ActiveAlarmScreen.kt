@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.speech.RecognizerIntent
 import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -69,6 +71,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +88,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.alarm.ActiveAlarmUiState
+import com.example.alarm.AlarmService
 import com.example.data.AlarmState
 import com.example.data.MissionType
 import com.example.mission.StepSensorTracker
@@ -983,21 +987,57 @@ private fun VoiceMissionView(
     var rmsLevel by remember { mutableFloatStateOf(0f) }
     var manualPhraseInput by remember { mutableStateOf("") }
 
+    val currentOnVoiceRecognized by rememberUpdatedState(onVoiceRecognized)
+
+    val systemSpeechDialogLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        AlarmService.setVoiceListeningMute(false)
+        isListening = false
+        if (result.resultCode == Activity.RESULT_OK) {
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val best = matches?.firstOrNull().orEmpty()
+            if (best.isNotBlank()) {
+                voiceStatus = "Распознано: «$best»"
+                currentOnVoiceRecognized(best)
+            } else {
+                voiceStatus = "Речь не распознана. Попробуйте снова или введите текст вручную."
+            }
+        } else {
+            voiceStatus = "Голосовой ввод отменен. Нажмите кнопку микрофона или введите фразу ниже."
+        }
+    }
+
     val speechHelper = remember {
         VoiceSpeechHelper(
             context = context,
             onStatusChanged = { listening, status ->
                 isListening = listening
                 voiceStatus = status
+                AlarmService.setVoiceListeningMute(listening)
             },
             onRmsChanged = { rms -> rmsLevel = rms },
-            onSpeechResult = { text -> onVoiceRecognized(text) }
+            onSpeechResult = { text ->
+                AlarmService.setVoiceListeningMute(false)
+                currentOnVoiceRecognized(text)
+            },
+            onFallbackActivityRequested = { intent ->
+                runCatching {
+                    AlarmService.setVoiceListeningMute(true)
+                    systemSpeechDialogLauncher.launch(intent)
+                    true
+                }.getOrElse {
+                    AlarmService.setVoiceListeningMute(false)
+                    false
+                }
+            }
         )
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            speechHelper.stopListening()
+            AlarmService.setVoiceListeningMute(false)
+            speechHelper.release()
         }
     }
 
@@ -1007,6 +1047,8 @@ private fun VoiceMissionView(
         onPermissionRefresh()
         if (granted) {
             speechHelper.startListening()
+        } else {
+            voiceStatus = "Доступ к микрофону отклонен. Разрешите микрофон или введите фразу вручную."
         }
     }
 

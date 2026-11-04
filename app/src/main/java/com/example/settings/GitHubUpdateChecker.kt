@@ -14,8 +14,8 @@ data class GitHubReleaseCheckResult(
     val isChecking: Boolean = false,
     val checked: Boolean = false,
     val updateAvailable: Boolean = false,
-    val currentVersion: String = "1.0",
-    val latestTagVersion: String = "1.0",
+    val currentVersion: String = "1.0.3",
+    val latestTagVersion: String = "1.0.3",
     val releasePageUrl: String = "https://github.com/alarm-commander/alarm-commander-android/releases",
     val apkDownloadUrl: String = "",
     val statusMessageRu: String = "Нажмите для проверки актуального релиза на GitHub",
@@ -79,7 +79,7 @@ object GitHubUpdateChecker {
 
     suspend fun checkLatestRelease(
         repoSlug: String,
-        currentVersionName: String = "1.0"
+        currentVersionName: String = "1.0.3"
     ): GitHubReleaseCheckResult = withContext(Dispatchers.IO) {
         val cleanedRepo = repoSlug.trim().removePrefix("https://github.com/").trim('/')
         val fallbackPageUrl = "https://github.com/$cleanedRepo/releases"

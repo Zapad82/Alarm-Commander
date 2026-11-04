@@ -38,6 +38,19 @@
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
+    <!-- Видимость системных сервисов распознавания речи и выбора мелодий для Android 11–16 (targetSdk 36) -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.RINGTONE_PICKER" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
