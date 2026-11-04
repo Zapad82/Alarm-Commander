@@ -28,6 +28,11 @@ data class CommanderSettingsState(
     val bypassDndPreferred: Boolean = true,
     val defaultQrPayload: String = "ALARM-COMMANDER-BATHROOM-01",
     val defaultNfcTagId: String = "*",
+    // Глобальные настройки звука, вибрации и системной мелодии по умолчанию
+    val defaultSignalMode: String = "SOUND_AND_VIBRO",
+    val defaultSoundSource: String = "SYSTEM_DEFAULT_ALARM",
+    val customRingtoneUri: String = "",
+    val customRingtoneTitle: String = "",
     // Язык ("SYSTEM", "RU", "EN") и тема ("DARK", "LIGHT", "SYSTEM") + репозиторий обновлений GitHub
     val languageMode: String = "SYSTEM",
     val themeMode: String = "DARK",
@@ -53,6 +58,10 @@ class SettingsRepository(private val context: Context) {
         val BYPASS_DND_PREFERRED = booleanPreferencesKey("bypass_dnd_preferred")
         val DEFAULT_QR_PAYLOAD = stringPreferencesKey("default_qr_payload")
         val DEFAULT_NFC_TAG_ID = stringPreferencesKey("default_nfc_tag_id")
+        val DEFAULT_SIGNAL_MODE = stringPreferencesKey("default_signal_mode")
+        val DEFAULT_SOUND_SOURCE = stringPreferencesKey("default_sound_source")
+        val CUSTOM_RINGTONE_URI = stringPreferencesKey("custom_ringtone_uri")
+        val CUSTOM_RINGTONE_TITLE = stringPreferencesKey("custom_ringtone_title")
         val LANGUAGE_MODE = stringPreferencesKey("language_mode")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val GITHUB_REPO_SLUG = stringPreferencesKey("github_repo_slug")
@@ -81,6 +90,10 @@ class SettingsRepository(private val context: Context) {
             bypassDndPreferred = prefs[Keys.BYPASS_DND_PREFERRED] ?: true,
             defaultQrPayload = prefs[Keys.DEFAULT_QR_PAYLOAD] ?: "ALARM-COMMANDER-BATHROOM-01",
             defaultNfcTagId = prefs[Keys.DEFAULT_NFC_TAG_ID] ?: "*",
+            defaultSignalMode = prefs[Keys.DEFAULT_SIGNAL_MODE] ?: "SOUND_AND_VIBRO",
+            defaultSoundSource = prefs[Keys.DEFAULT_SOUND_SOURCE] ?: "SYSTEM_DEFAULT_ALARM",
+            customRingtoneUri = prefs[Keys.CUSTOM_RINGTONE_URI] ?: "",
+            customRingtoneTitle = prefs[Keys.CUSTOM_RINGTONE_TITLE] ?: "",
             languageMode = prefs[Keys.LANGUAGE_MODE] ?: "SYSTEM",
             themeMode = prefs[Keys.THEME_MODE] ?: "DARK",
             githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "alarm-commander/alarm-commander-android",
@@ -111,6 +124,20 @@ class SettingsRepository(private val context: Context) {
     suspend fun setGithubRepoSlug(slug: String) {
         context.dataStore.edit {
             it[Keys.GITHUB_REPO_SLUG] = slug.trim().ifEmpty { "alarm-commander/alarm-commander-android" }
+        }
+    }
+
+    suspend fun updateSignalSettings(
+        signalMode: String,
+        soundSource: String,
+        customRingtoneUri: String,
+        customRingtoneTitle: String
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DEFAULT_SIGNAL_MODE] = signalMode
+            prefs[Keys.DEFAULT_SOUND_SOURCE] = soundSource
+            prefs[Keys.CUSTOM_RINGTONE_URI] = customRingtoneUri
+            prefs[Keys.CUSTOM_RINGTONE_TITLE] = customRingtoneTitle
         }
     }
 

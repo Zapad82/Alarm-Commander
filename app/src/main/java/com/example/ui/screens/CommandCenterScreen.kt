@@ -71,12 +71,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.alarm.AlarmAudioController
 import com.example.alarm.AlarmScheduler
 import com.example.data.AlarmEntity
+import com.example.data.AlarmSignalMode
+import com.example.data.AlarmSoundSource
 import com.example.data.EscalationProfile
 import com.example.data.MathDifficulty
 import com.example.data.MissionType
@@ -112,6 +123,10 @@ fun CommandCenterScreen(
     totalPermissionsCount: Int,
     defaultQrPayload: String,
     defaultNfcTagId: String,
+    defaultSignalMode: String = AlarmSignalMode.SOUND_AND_VIBRO.name,
+    defaultSoundSource: String = AlarmSoundSource.SYSTEM_DEFAULT_ALARM.name,
+    defaultRingtoneUri: String = "",
+    defaultRingtoneTitle: String = "",
     onAcceptDisclaimer: () -> Unit,
     onSaveAlarm: (AlarmEntity) -> Unit,
     onToggleAlarm: (AlarmEntity, Boolean) -> Unit,
@@ -161,6 +176,10 @@ fun CommandCenterScreen(
             initialAlarm = editingAlarm,
             defaultQrPayload = defaultQrPayload,
             defaultNfcTagId = defaultNfcTagId,
+            defaultSignalMode = defaultSignalMode,
+            defaultSoundSource = defaultSoundSource,
+            defaultRingtoneUri = defaultRingtoneUri,
+            defaultRingtoneTitle = defaultRingtoneTitle,
             onDismiss = { showEditorDialog = false },
             onSave = { updated ->
                 showEditorDialog = false
@@ -627,6 +646,22 @@ private fun AlarmCardItem(
                         color = MaterialTheme.colorScheme.secondary
                     )
                 }
+                val soundLabel = if (alarm.signalModeEnum == AlarmSignalMode.VIBRO_ONLY) {
+                    alarm.signalModeEnum.localizedBadge(s.isEnglish)
+                } else {
+                    val melodyShort = if (alarm.soundSourceEnum == AlarmSoundSource.SYSTEM_CUSTOM_RINGTONE &&
+                        alarm.customRingtoneTitle.isNotBlank()
+                    ) {
+                        alarm.customRingtoneTitle.localizeRuntimeText(s.isEnglish)
+                    } else {
+                        alarm.soundSourceEnum.localizedShort(s.isEnglish)
+                    }
+                    "${alarm.signalModeEnum.localizedBadge(s.isEnglish)} • $melodyShort"
+                }
+                BadgePill(
+                    text = soundLabel,
+                    color = MaterialTheme.colorScheme.secondary
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -694,10 +729,15 @@ fun AlarmEditorDialog(
     initialAlarm: AlarmEntity?,
     defaultQrPayload: String,
     defaultNfcTagId: String,
+    defaultSignalMode: String = AlarmSignalMode.SOUND_AND_VIBRO.name,
+    defaultSoundSource: String = AlarmSoundSource.SYSTEM_DEFAULT_ALARM.name,
+    defaultRingtoneUri: String = "",
+    defaultRingtoneTitle: String = "",
     onDismiss: () -> Unit,
     onSave: (AlarmEntity) -> Unit
 ) {
     val s = LocalAppStrings.current
+    val context = LocalContext.current
     var hour by remember { mutableIntStateOf(initialAlarm?.hour ?: 7) }
     var minute by remember { mutableIntStateOf(initialAlarm?.minute ?: 0) }
     var label by remember {
@@ -714,6 +754,48 @@ fun AlarmEditorDialog(
 
     var profile by remember {
         mutableStateOf(initialAlarm?.profileEnum ?: EscalationProfile.HARD)
+    }
+
+    var signalMode by remember {
+        mutableStateOf(
+            initialAlarm?.signalModeEnum ?: AlarmSignalMode.fromName(defaultSignalMode)
+        )
+    }
+    var soundSource by remember {
+        mutableStateOf(
+            initialAlarm?.soundSourceEnum ?: AlarmSoundSource.fromName(defaultSoundSource)
+        )
+    }
+    var customRingtoneUri by remember {
+        mutableStateOf(initialAlarm?.customRingtoneUri?.ifBlank { defaultRingtoneUri } ?: defaultRingtoneUri)
+    }
+    var customRingtoneTitle by remember {
+        val initTitle = initialAlarm?.customRingtoneTitle?.ifBlank { defaultRingtoneTitle } ?: defaultRingtoneTitle
+        mutableStateOf(
+            initTitle.ifBlank {
+                AlarmAudioController.resolveRingtoneTitle(context, customRingtoneUri, s.isEnglish)
+            }
+        )
+    }
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val pickedUri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            if (pickedUri != null) {
+                val uriStr = pickedUri.toString()
+                customRingtoneUri = uriStr
+                customRingtoneTitle = AlarmAudioController.resolveRingtoneTitle(context, uriStr, s.isEnglish)
+                soundSource = AlarmSoundSource.SYSTEM_CUSTOM_RINGTONE
+            }
+        }
     }
 
     val selectedMissions = remember {
@@ -869,6 +951,59 @@ fun AlarmEditorDialog(
                 }
 
                 Text(
+                    s.signalModeLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AlarmSignalMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = signalMode == mode,
+                            onClick = { signalMode = mode },
+                            label = { Text(mode.localizedBadge(s.isEnglish)) }
+                        )
+                    }
+                }
+
+                if (signalMode != AlarmSignalMode.VIBRO_ONLY) {
+                    Text(
+                        s.soundSourceLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AlarmSoundSource.entries.forEach { src ->
+                            FilterChip(
+                                selected = soundSource == src,
+                                onClick = { soundSource = src },
+                                label = { Text(src.localizedShort(s.isEnglish)) }
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val pickerIntent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                    RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_RINGTONE
+                                )
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                            }
+                            runCatching { ringtonePickerLauncher.launch(pickerIntent) }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                    ) {
+                        Text(
+                            text = "${s.pickSystemRingtoneBtn} ($customRingtoneTitle)",
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Text(
                     s.editorMissionChain,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
@@ -1014,7 +1149,11 @@ fun AlarmEditorDialog(
                         sunrisePreAlarmEnabled = sunriseEnabled,
                         antiReturnEnabled = antiReturnEnabled,
                         backupWebhookEnabled = backupWebhookEnabled,
-                        backupContactEnabled = backupContactEnabled
+                        backupContactEnabled = backupContactEnabled,
+                        signalMode = signalMode.name,
+                        soundSource = soundSource.name,
+                        customRingtoneUri = customRingtoneUri,
+                        customRingtoneTitle = customRingtoneTitle
                     )
                     onSave(entity)
                 },

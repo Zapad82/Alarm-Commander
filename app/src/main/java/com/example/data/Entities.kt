@@ -97,6 +97,85 @@ enum class MathDifficulty(val titleRu: String, val problemsCount: Int) {
 }
 
 /**
+ * Режим подачи сигнала будильника: Звук + Вибрация, Только звук, Только вибрация.
+ */
+enum class AlarmSignalMode(val titleRu: String, val titleEn: String, val badgeRu: String, val badgeEn: String) {
+    SOUND_AND_VIBRO("Звук + Вибрация", "Sound + Vibration", "Звук + Вибро", "Sound + Vibro"),
+    SOUND_ONLY("Только звук (без вибро)", "Sound Only (No Vibro)", "Только звук", "Sound Only"),
+    VIBRO_ONLY("Только вибрация (без звука)", "Vibration Only (Silent)", "Только вибро", "Vibro Only");
+
+    fun localizedTitle(isEnglish: Boolean): String = if (isEnglish) titleEn else titleRu
+    fun localizedBadge(isEnglish: Boolean): String = if (isEnglish) badgeEn else badgeRu
+
+    companion object {
+        fun fromName(raw: String?): AlarmSignalMode =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: SOUND_AND_VIBRO
+    }
+}
+
+/**
+ * Источник звукового сигнала будильника: стандартный будильник ОС, системная мелодия телефона или встроенные синтезаторы.
+ */
+enum class AlarmSoundSource(
+    val titleRu: String,
+    val titleEn: String,
+    val subtitleRu: String,
+    val subtitleEn: String,
+    val shortRu: String,
+    val shortEn: String
+) {
+    SYSTEM_DEFAULT_ALARM(
+        titleRu = "Стандартный звук будильника телефона",
+        titleEn = "Default Phone Alarm Sound",
+        subtitleRu = "Стандартная системная мелодия будильника Android",
+        subtitleEn = "Standard Android system default alarm tone",
+        shortRu = "Стандартный будильник",
+        shortEn = "Default Alarm"
+    ),
+    SYSTEM_CUSTOM_RINGTONE(
+        titleRu = "Системная мелодия телефона (выбор из списка)",
+        titleEn = "System Phone Ringtone / Alarm Melody",
+        subtitleRu = "Любая мелодия будильника, звонка или уведомления с вашего телефона",
+        subtitleEn = "Any alarm melody or ringtone installed on your phone",
+        shortRu = "Мелодия телефона",
+        shortEn = "Phone Melody"
+    ),
+    SYNTH_TACTICAL_SIREN(
+        titleRu = "Тактическая сирена (встроенный синтезатор)",
+        titleEn = "Tactical Siren (Built-in Synth)",
+        subtitleRu = "Двухчастотный генератор с нарастающей плотностью",
+        subtitleEn = "Dual-tone generator with progressive cadence",
+        shortRu = "Сирена",
+        shortEn = "Tactical Siren"
+    ),
+    SYNTH_RADAR_SONAR(
+        titleRu = "Радарный сонар (встроенный синтезатор)",
+        titleEn = "Radar Sonar Pulse (Built-in Synth)",
+        subtitleRu = "Чёткие высококонтрастные импульсы сонара 880 / 1320 Гц",
+        subtitleEn = "High-contrast 880 / 1320 Hz sonar pulses",
+        shortRu = "Сонар",
+        shortEn = "Radar Sonar"
+    ),
+    SYNTH_GENTLE_CHORD(
+        titleRu = "Мягкий гармонический тон (432 Гц)",
+        titleEn = "Gentle Harmonic Tone (432 Hz)",
+        subtitleRu = "Плавный гармонический аккорд без резких частот",
+        subtitleEn = "Smooth harmonic chord without harsh frequencies",
+        shortRu = "Мягкий тон 432 Гц",
+        shortEn = "Gentle 432 Hz"
+    );
+
+    fun localizedTitle(isEnglish: Boolean): String = if (isEnglish) titleEn else titleRu
+    fun localizedSubtitle(isEnglish: Boolean): String = if (isEnglish) subtitleEn else subtitleRu
+    fun localizedShort(isEnglish: Boolean): String = if (isEnglish) shortEn else shortRu
+
+    companion object {
+        fun fromName(raw: String?): AlarmSoundSource =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: SYSTEM_DEFAULT_ALARM
+    }
+}
+
+/**
  * Room-сущность будильника.
  */
 @Entity(tableName = "alarms")
@@ -130,6 +209,11 @@ data class AlarmEntity(
     /** Резервные каналы при просрочке (Overdue) */
     val backupWebhookEnabled: Boolean = true,
     val backupContactEnabled: Boolean = true,
+    /** Настройки сигнала: Звук+Вибро / Только звук / Только вибро и выбранная мелодия */
+    val signalMode: String = AlarmSignalMode.SOUND_AND_VIBRO.name,
+    val soundSource: String = AlarmSoundSource.SYSTEM_DEFAULT_ALARM.name,
+    val customRingtoneUri: String = "",
+    val customRingtoneTitle: String = "",
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val profileEnum: EscalationProfile
@@ -139,6 +223,12 @@ data class AlarmEntity(
     val mathDifficultyEnum: MathDifficulty
         get() = runCatching { MathDifficulty.valueOf(mathDifficulty) }
             .getOrDefault(MathDifficulty.MEDIUM)
+
+    val signalModeEnum: AlarmSignalMode
+        get() = AlarmSignalMode.fromName(signalMode)
+
+    val soundSourceEnum: AlarmSoundSource
+        get() = AlarmSoundSource.fromName(soundSource)
 
     val missionChain: List<MissionType>
         get() = missionChainCsv.split(",")

@@ -169,6 +169,7 @@ class AlarmService : Service() {
     }
 
     private suspend fun startAlarmOrSunriseSession(alarmId: Long, isSunrise: Boolean) {
+        val savedSettings = settingsRepository.getSnapshot()
         val alarm = (if (alarmId > 0L) repository.getAlarmById(alarmId) else null)
             ?: AlarmEntity(
                 id = 999L,
@@ -181,7 +182,11 @@ class AlarmService : Service() {
                 targetSteps = 30,
                 allowSnooze = true,
                 sunrisePreAlarmEnabled = true,
-                antiReturnEnabled = true
+                antiReturnEnabled = true,
+                signalMode = savedSettings.defaultSignalMode,
+                soundSource = savedSettings.defaultSoundSource,
+                customRingtoneUri = savedSettings.customRingtoneUri,
+                customRingtoneTitle = savedSettings.customRingtoneTitle
             )
 
         val started = escalationEngine.startSession(
@@ -201,7 +206,6 @@ class AlarmService : Service() {
 
         val missions = buildMissionList(alarm)
         val coordinator = MissionChainCoordinator(missions)
-        val savedSettings = settingsRepository.getSnapshot()
         val initialProgress = if (savedSettings.activeAlarmId == alarm.id && savedSettings.activeMissionIndex > 0) {
             coordinator.setMissionIndex(savedSettings.activeMissionIndex)
         } else {
@@ -297,11 +301,16 @@ class AlarmService : Service() {
                         )
                     }
                 } else {
+                    val settingsSnap = settingsRepository.getSnapshot()
+                    val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
                     audioController.startOrUpdate(
                         stage = snap.stage,
                         volumePercent = snap.volumePercent,
                         dualTone = snap.dualToneActive,
-                        vibrationCadenceLevel = snap.vibrationCadenceLevel
+                        vibrationCadenceLevel = snap.vibrationCadenceLevel,
+                        signalMode = alarm.signalModeEnum,
+                        soundSource = alarm.soundSourceEnum,
+                        customRingtoneUri = effectiveUri
                     )
                 }
 
@@ -524,11 +533,16 @@ class AlarmService : Service() {
             details = "Запущена 60-секундная проверка бодрствования (Анти-возврат в кровать)"
         )
 
+        val settingsSnap = settingsRepository.getSnapshot()
+        val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
         audioController.startOrUpdate(
             stage = 1,
             volumePercent = 35,
             dualTone = false,
-            vibrationCadenceLevel = 1
+            vibrationCadenceLevel = 1,
+            signalMode = alarm.signalModeEnum,
+            soundSource = alarm.soundSourceEnum,
+            customRingtoneUri = effectiveUri
         )
 
         _activeUiState.value = ActiveAlarmUiState(

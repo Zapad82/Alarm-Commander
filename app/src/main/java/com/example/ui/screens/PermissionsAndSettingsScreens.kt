@@ -1,13 +1,17 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,13 +35,18 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,12 +60,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -65,7 +76,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.BuildConfig
+import com.example.alarm.AlarmAudioController
 import com.example.data.AlarmLogEntity
+import com.example.data.AlarmSignalMode
+import com.example.data.AlarmSoundSource
 import com.example.mission.QrCodeUtils
 import com.example.permissions.PermissionItemStatus
 import com.example.permissions.PermissionManager
@@ -484,6 +498,12 @@ fun SettingsScreen(
     apkSignatureSha256: String,
     onSetLanguageMode: (AppLanguageMode) -> Unit,
     onSetThemeMode: (AppThemeMode) -> Unit,
+    onUpdateSignalSettings: (
+        signalMode: String,
+        soundSource: String,
+        customRingtoneUri: String,
+        customRingtoneTitle: String
+    ) -> Unit,
     onCheckGithubUpdate: (String) -> Unit,
     onSaveSettings: (
         sunriseUrl: String,
@@ -508,6 +528,58 @@ fun SettingsScreen(
     var qrPayload by remember(settings.defaultQrPayload) { mutableStateOf(settings.defaultQrPayload) }
     var nfcTagId by remember(settings.defaultNfcTagId) { mutableStateOf(settings.defaultNfcTagId) }
     var githubRepoSlug by remember(settings.githubRepoSlug) { mutableStateOf(settings.githubRepoSlug) }
+
+    var selectedSignalMode by remember(settings.defaultSignalMode) {
+        mutableStateOf(AlarmSignalMode.fromName(settings.defaultSignalMode))
+    }
+    var selectedSoundSource by remember(settings.defaultSoundSource) {
+        mutableStateOf(AlarmSoundSource.fromName(settings.defaultSoundSource))
+    }
+    var customRingtoneUri by remember(settings.customRingtoneUri) {
+        mutableStateOf(settings.customRingtoneUri)
+    }
+    var customRingtoneTitle by remember(settings.customRingtoneTitle, settings.customRingtoneUri, s.isEnglish) {
+        val resolved = settings.customRingtoneTitle.ifBlank {
+            AlarmAudioController.resolveRingtoneTitle(context, settings.customRingtoneUri, s.isEnglish)
+        }
+        mutableStateOf(resolved)
+    }
+
+    var isPreviewPlaying by remember { mutableStateOf(false) }
+    val previewAudioController = remember { AlarmAudioController(context) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            previewAudioController.stopAll()
+        }
+    }
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val pickedUri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            if (pickedUri != null) {
+                val uriStr = pickedUri.toString()
+                val title = AlarmAudioController.resolveRingtoneTitle(context, uriStr, s.isEnglish)
+                customRingtoneUri = uriStr
+                customRingtoneTitle = title
+                selectedSoundSource = AlarmSoundSource.SYSTEM_CUSTOM_RINGTONE
+                onUpdateSignalSettings(
+                    selectedSignalMode.name,
+                    selectedSoundSource.name,
+                    customRingtoneUri,
+                    customRingtoneTitle
+                )
+            }
+        }
+    }
 
     val currentLangMode = AppLanguageMode.fromStorage(settings.languageMode)
     val currentThemeMode = AppThemeMode.fromStorage(settings.themeMode)
@@ -627,7 +699,236 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Обновление через GitHub Releases и отпечаток собственного сертификата подписи APK
+        // 2. Звук, вибрация и системные мелодии телефона
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                        RoundedCornerShape(16.dp)
+                    )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.VolumeUp,
+                            contentDescription = s.soundAndVibroCardTitle,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = s.soundAndVibroCardTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = s.soundAndVibroCardSub,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Vibration,
+                            contentDescription = s.signalModeLabel,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = s.signalModeLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AlarmSignalMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = selectedSignalMode == mode,
+                                onClick = {
+                                    selectedSignalMode = mode
+                                    onUpdateSignalSettings(
+                                        selectedSignalMode.name,
+                                        selectedSoundSource.name,
+                                        customRingtoneUri,
+                                        customRingtoneTitle
+                                    )
+                                },
+                                label = { Text(mode.localizedTitle(s.isEnglish)) },
+                                modifier = Modifier.testTag("signal_mode_${mode.name}")
+                            )
+                        }
+                    }
+
+                    if (selectedSignalMode != AlarmSignalMode.VIBRO_ONLY) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = s.soundSourceLabel,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = s.soundSourceLabel,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AlarmSoundSource.entries.forEach { src ->
+                                val isSelected = selectedSoundSource == src
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        .clickable {
+                                            selectedSoundSource = src
+                                            onUpdateSignalSettings(
+                                                selectedSignalMode.name,
+                                                selectedSoundSource.name,
+                                                customRingtoneUri,
+                                                customRingtoneTitle
+                                            )
+                                        }
+                                        .padding(12.dp)
+                                        .testTag("sound_source_${src.name}"),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = src.localizedTitle(s.isEnglish),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                        Text(
+                                            text = src.localizedSubtitle(s.isEnglish),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isSelected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = s.selectedRingtoneLabel(customRingtoneTitle),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val pickerIntent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                    putExtra(
+                                        RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                        RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_RINGTONE
+                                    )
+                                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                    val existingUri = if (customRingtoneUri.isNotBlank()) {
+                                        runCatching { Uri.parse(customRingtoneUri) }.getOrNull()
+                                    } else {
+                                        AlarmAudioController.resolveDefaultAlarmUri()
+                                    }
+                                    putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri)
+                                }
+                                runCatching {
+                                    ringtonePickerLauncher.launch(pickerIntent)
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("pick_system_ringtone_button")
+                        ) {
+                            Icon(Icons.Default.MusicNote, contentDescription = s.pickSystemRingtoneBtn)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(s.pickSystemRingtoneBtn, textAlign = TextAlign.Center)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            if (isPreviewPlaying) {
+                                previewAudioController.stopAll()
+                                isPreviewPlaying = false
+                            } else {
+                                isPreviewPlaying = true
+                                previewAudioController.startPreview(
+                                    signalMode = selectedSignalMode,
+                                    soundSource = selectedSoundSource,
+                                    customRingtoneUri = customRingtoneUri,
+                                    onPreviewEnded = { isPreviewPlaying = false }
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isPreviewPlaying) MaterialTheme.colorScheme.error else TacticalAmber,
+                            contentColor = if (isPreviewPlaying) Color.White else Color.Black
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp)
+                            .testTag("preview_signal_button")
+                    ) {
+                        Icon(
+                            imageVector = if (isPreviewPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = if (isPreviewPlaying) s.stopPreviewSignalBtn else s.previewSignalBtn
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isPreviewPlaying) s.stopPreviewSignalBtn else s.previewSignalBtn,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Обновление через GitHub Releases и отпечаток собственного сертификата подписи APK
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

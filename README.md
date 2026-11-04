@@ -57,12 +57,13 @@
    - Выдайте разрешения **«Точные будильники»**, **«Полноэкранный вызов»** и **«Экстренные уведомления»**.
    - Рекомендуется добавить приложение в **«Исключения из экономии заряда»**, чтобы оболочка смартфона (Xiaomi HyperOS/MIUI, Samsung OneUI и др.) не останавливала будильник ночью.
    - Выдайте доступ к камере, шагомеру или микрофону, если планируете использовать соответствующие миссии.
-2. **Вкладка «Опции» (Тема, Язык, QR-код и Умный дом)**:
+2. **Вкладка «Опции» (Тема, Язык, Сигналы будильника, QR-код и Умный дом)**:
    - Выберите удобную тему (**Тёмная**, **Светлая** или **Авто**) и язык интерфейса (**Авто**, **Русский** или **English**) — переключатели также доступны на верхней панели.
+   - В карточке **«Сигнал будильника: Звук, Вибрация и Мелодии»** выберите режим (**Звук + Вибрация**, **Только звук** или **Только вибрация**) и источник звука (**Стандартный будильник телефона**, **любая системная мелодия телефона** через стандартный выбор Android, либо один из 3 встроенных синтезаторов: *Тактическая сирена*, *Радарный сонар*, *Мягкий тон 432 Гц*). Там же доступна кнопка **«Прослушать выбранный сигнал (4 сек)»**.
    - В карточке **«Контрольный QR-код для ванной / кухни»** нажмите кнопку отправки, распечатайте QR-код и приклейте его в ванной комнате.
    - При желании укажите локальные адреса Webhook вашего умного дома (Home Assistant) и номер резервного контакта.
 3. **Вкладка «Штаб» (Создание и проверка рубежа)**:
-   - Нажмите **«Новый рубеж»**, выберите время, дни недели, профиль эскалации и цепочку миссий.
+   - Нажмите **«Новый рубеж»**, выберите время, дни недели, профиль эскалации, индивидуальный режим сигнала/мелодию и цепочку миссий.
    - Используйте блок **«Полигон проверки сигнала и миссий»** (`Тест T0`, `Рассвет T−15`, `Тест «Анти-возврат»`), чтобы заранее протестировать звук, камеру и шагомер.
 
 > **Предупреждение о безопасности**: Приложение является вспомогательным инструментом дисциплины пробуждения, **не гарантирует пробуждение на 100%** и **не является медицинским устройством**. В приложении намеренно исключены любые опасные для здоровья методы (высокочастотные стробоскопы, скрытая запись, передача личных данных).
@@ -119,12 +120,13 @@ Standard alarms are easy to swipe away while half-asleep or snooze indefinitely.
    - Grant **Exact Alarms**, **Full-Screen Intent**, and **High-Priority Notifications**.
    - Enable **Unrestricted Battery** so aggressive OEM battery savers do not terminate the alarm overnight.
    - Grant Camera, Physical Activity, or Microphone permissions for the missions you use.
-2. **Config Tab (Theme, Language, QR Code & Smart Home)**:
+2. **Config Tab (Theme, Language, Alarm Signal & Melodies, QR Code & Smart Home)**:
    - Switch between **Dark**, **Light**, or **System** theme and select **Auto (OS)**, **Русский**, or **English** language (also accessible right from the top bar).
+   - Under **Alarm Signal: Sound, Vibration & Ringtones**, choose your signal mode (**Sound + Vibration**, **Sound Only**, or **Vibration Only**) and sound source (**Default Phone Alarm Sound**, **any System Phone Ringtone/Melody** via the native Android ringtone picker, or one of the 3 built-in synthesizers: *Tactical Siren*, *Radar Sonar*, *Gentle 432 Hz Tone*), and test it with the **4-second live preview** button.
    - Generate and share your **Control QR Code** to print and place in your bathroom or kitchen.
    - Optionally configure local Smart Home Webhook URLs (`https://` or local `192.168.x.x` / `10.x.x.x` LAN) and a backup contact.
 3. **HQ Tab (Create & Test Alarms)**:
-   - Tap **"New Alarm"** to configure time, days of week, escalation profile, and mission chain.
+   - Tap **"New Alarm"** to configure time, days of week, escalation profile, per-alarm signal mode/melody, and mission chain.
    - Use the **Signal & Mission Proving Ground** (`Test T0`, `Sunrise T−15`, `Test Anti-Return`) to test your setup anytime.
 
 > **Safety Disclaimer**: Alarm Commander is a supplementary wake-up discipline tool, **does not guarantee 100% wake-up**, and is **not a medical or life-support device**. All data is stored strictly on-device.

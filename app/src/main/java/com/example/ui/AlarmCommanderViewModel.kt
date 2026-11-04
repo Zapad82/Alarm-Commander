@@ -236,6 +236,33 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
         AlarmService.confirmAntiReturnAwake()
     }
 
+    fun updateGlobalSignalSettings(
+        signalMode: String,
+        soundSource: String,
+        customRingtoneUri: String,
+        customRingtoneTitle: String
+    ) {
+        viewModelScope.launch {
+            settingsRepository.updateSignalSettings(
+                signalMode = signalMode,
+                soundSource = soundSource,
+                customRingtoneUri = customRingtoneUri,
+                customRingtoneTitle = customRingtoneTitle
+            )
+            // Применяем глобальный выбор сигнала и мелодии ко всем существующим будильникам
+            alarmsFlow.value.forEach { alarm ->
+                repository.saveAlarm(
+                    alarm.copy(
+                        signalMode = signalMode,
+                        soundSource = soundSource,
+                        customRingtoneUri = customRingtoneUri,
+                        customRingtoneTitle = customRingtoneTitle
+                    )
+                )
+            }
+        }
+    }
+
     fun saveBackupAndSensorSettings(
         sunriseWebhookUrl: String,
         escalationWebhookUrl: String,

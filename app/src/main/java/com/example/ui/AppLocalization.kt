@@ -188,7 +188,16 @@ data class AppStrings(
     val testContactBtn: String,
     val saveBackupSettingsBtn: String,
     val stubsCardTitle: String,
-    val stubsCardSub: String
+    val stubsCardSub: String,
+    // Sound, Vibration & System Ringtone Settings
+    val soundAndVibroCardTitle: String,
+    val soundAndVibroCardSub: String,
+    val signalModeLabel: String,
+    val soundSourceLabel: String,
+    val selectedRingtoneLabel: (String) -> String,
+    val pickSystemRingtoneBtn: String,
+    val previewSignalBtn: String,
+    val stopPreviewSignalBtn: String
 )
 
 val RussianStrings = AppStrings(
@@ -333,7 +342,15 @@ val RussianStrings = AppStrings(
     testContactBtn = "Проверить оповещение резервного контакта",
     saveBackupSettingsBtn = "СОХРАНИТЬ НАСТРОЙКИ РЕЗЕРВА",
     stubsCardTitle = "ИНТЕРФЕЙСЫ POST-MVP КАНАЛОВ (STUBS)",
-    stubsCardSub = "Архитектурные адаптеры BackupChannel с чистыми контрактами и записью в локальный журнал:"
+    stubsCardSub = "Архитектурные адаптеры BackupChannel с чистыми контрактами и записью в локальный журнал:",
+    soundAndVibroCardTitle = "СИГНАЛ БУДИЛЬНИКА: ЗВУК, ВИБРАЦИЯ И МЕЛОДИИ",
+    soundAndVibroCardSub = "Выберите режим подачи сигнала (Звук + Вибро / Только звук / Только вибро) и мелодию: стандартный будильник Android, любую системную мелодию телефона или встроенный синтезатор.",
+    signalModeLabel = "Режим подачи сигнала:",
+    soundSourceLabel = "Мелодия / Источник звука:",
+    selectedRingtoneLabel = { "Выбранная мелодия телефона: $it" },
+    pickSystemRingtoneBtn = "Выбрать системную мелодию телефона",
+    previewSignalBtn = "Прослушать выбранный сигнал (4 сек)",
+    stopPreviewSignalBtn = "Остановить прослушивание"
 )
 
 val EnglishStrings = AppStrings(
@@ -478,7 +495,15 @@ val EnglishStrings = AppStrings(
     testContactBtn = "Test Backup Contact Alert",
     saveBackupSettingsBtn = "SAVE BACKUP SETTINGS",
     stubsCardTitle = "POST-MVP CHANNEL INTERFACES (STUBS)",
-    stubsCardSub = "Clean BackupChannel adapters logging test invocations locally:"
+    stubsCardSub = "Clean BackupChannel adapters logging test invocations locally:",
+    soundAndVibroCardTitle = "ALARM SIGNAL: SOUND, VIBRATION & RINGTONES",
+    soundAndVibroCardSub = "Choose the signal mode (Sound + Vibro / Sound Only / Vibro Only) and sound source: default Android alarm, any system phone melody, or built-in tactical synthesizer.",
+    signalModeLabel = "Signal Mode:",
+    soundSourceLabel = "Alarm Melody / Sound Source:",
+    selectedRingtoneLabel = { "Selected phone melody: $it" },
+    pickSystemRingtoneBtn = "Pick System Phone Melody / Ringtone",
+    previewSignalBtn = "Preview Selected Signal (4 sec)",
+    stopPreviewSignalBtn = "Stop Signal Preview"
 )
 
 val LocalAppStrings = compositionLocalOf { RussianStrings }
