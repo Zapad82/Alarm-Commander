@@ -128,6 +128,8 @@ fun CommandCenterScreen(
     defaultSoundSource: String = AlarmSoundSource.SYSTEM_DEFAULT_ALARM.name,
     defaultRingtoneUri: String = "",
     defaultRingtoneTitle: String = "",
+    permissionManager: com.example.permissions.PermissionManager? = null,
+    onRefreshPermissions: () -> Unit = {},
     onAcceptDisclaimer: () -> Unit,
     onSaveAlarm: (AlarmEntity) -> Unit,
     onToggleAlarm: (AlarmEntity, Boolean) -> Unit,
@@ -136,9 +138,16 @@ fun CommandCenterScreen(
     onTriggerAntiReturnTest: (Long) -> Unit
 ) {
     val s = LocalAppStrings.current
+    val context = LocalContext.current
     var editingAlarm by remember { mutableStateOf<AlarmEntity?>(null) }
     var showEditorDialog by remember { mutableStateOf(false) }
     var showDisclaimerDialog by remember { mutableStateOf(!disclaimerAccepted) }
+
+    val postNotifLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        onRefreshPermissions()
+    }
 
     if (showDisclaimerDialog) {
         AlertDialog(
@@ -204,6 +213,104 @@ fun CommandCenterScreen(
                     grantedPermissionsCount = grantedPermissionsCount,
                     totalPermissionsCount = totalPermissionsCount
                 )
+            }
+
+            // 1b. Критический баннер доступа к шторке уведомлений и показу поверх блокировки (если не выданы)
+            val isNotifMissing = permissionManager != null && !permissionManager.isPostNotificationsGranted()
+            val isFullScreenMissing = permissionManager != null && !permissionManager.canUseFullScreenIntent()
+            if (isNotifMissing || isFullScreenMissing) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(2.dp, AlertCrimson, RoundedCornerShape(14.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = if (s.isEnglish) {
+                                    "CRITICAL: Enable Shade Notification & Lockscreen Popup"
+                                } else {
+                                    "ВАЖНО: Разрешите показ в шторке уведомлений и поверх экрана блокировки"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = AlertCrimson
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (s.isEnglish) {
+                                    "Without these permissions, Android hides the alarm notification in the shade and blocks the alarm window over a locked screen."
+                                } else {
+                                    "Без этих разрешений Android скрывает уведомление будильника в шторке и не даёт открыть окно миссии поверх заблокированного экрана без ввода пароля."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (isNotifMissing) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            postNotifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            runCatching {
+                                                context.startActivity(permissionManager!!.buildAppDetailsIntent())
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = AlertCrimson,
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("grant_shade_notif_button")
+                                ) {
+                                    Text(
+                                        text = if (s.isEnglish) {
+                                            "1. Enable Alarm Notification in Shade"
+                                        } else {
+                                            "1. Включить уведомление будильника в шторке"
+                                        },
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                            if (isFullScreenMissing) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        runCatching {
+                                            context.startActivity(permissionManager!!.buildFullScreenIntentSettings())
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TacticalAmber,
+                                        contentColor = Color.Black
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("grant_fullscreen_lock_button")
+                                ) {
+                                    Text(
+                                        text = if (s.isEnglish) {
+                                            "2. Allow Alarm Window Over Lockscreen"
+                                        } else {
+                                            "2. Разрешить показ окна поверх блокировки"
+                                        },
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // 2. Обязательный дисклеймер безопасности

@@ -92,6 +92,7 @@
             <intent-filter>
                 <action android:name="com.example.action.TRIGGER_ALARM" />
                 <action android:name="com.example.action.WATCHDOG_REVIVE" />
+                <action android:name="com.example.action.RESTORE_ALARM_NOTIFICATION" />
                 <action android:name="com.example.action.PRE_ALARM_SUNRISE" />
                 <action android:name="com.example.action.ANTI_RETURN_CHECK" />
                 <action android:name="com.example.action.DISMISS_ANTI_RETURN" />

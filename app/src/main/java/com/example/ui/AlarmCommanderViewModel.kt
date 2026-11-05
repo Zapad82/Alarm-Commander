@@ -191,6 +191,11 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
      * Немедленный запуск боевого теста T0 или фазы «Рассвет» (T−15) через Foreground-сервис.
      */
     fun triggerCombatTestAlarm(alarmId: Long, isSunrise: Boolean = false) {
+        AlarmService.markAlarmLaunchingFromReceiver(
+            alarmId = alarmId,
+            isSunrise = isSunrise,
+            isAntiReturn = false
+        )
         val intent = Intent(appContext, AlarmService::class.java).apply {
             action = if (isSunrise) {
                 AlarmService.ACTION_START_SUNRISE
@@ -207,6 +212,11 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
      * Немедленный запуск 60-секундной проверки «Анти-возврата в кровать» для тестирования.
      */
     fun triggerAntiReturnTest(alarmId: Long) {
+        AlarmService.markAlarmLaunchingFromReceiver(
+            alarmId = alarmId,
+            isSunrise = false,
+            isAntiReturn = true
+        )
         val intent = Intent(appContext, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START_ANTI_RETURN
             putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId)

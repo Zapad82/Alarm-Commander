@@ -20,6 +20,7 @@ class AlarmScheduler(private val context: Context) {
     companion object {
         const val ACTION_TRIGGER_ALARM = "com.example.action.TRIGGER_ALARM"
         const val ACTION_WATCHDOG_REVIVE = "com.example.action.WATCHDOG_REVIVE"
+        const val ACTION_RESTORE_ALARM_NOTIFICATION = "com.example.action.RESTORE_ALARM_NOTIFICATION"
         const val ACTION_PRE_ALARM_SUNRISE = "com.example.action.PRE_ALARM_SUNRISE"
         const val ACTION_ANTI_RETURN_CHECK = "com.example.action.ANTI_RETURN_CHECK"
         const val ACTION_DISMISS_ANTI_RETURN = "com.example.action.DISMISS_ANTI_RETURN"
@@ -28,6 +29,7 @@ class AlarmScheduler(private val context: Context) {
         const val EXTRA_IS_SUNRISE = "extra_is_sunrise"
         const val EXTRA_IS_ANTI_RETURN = "extra_is_anti_return"
         const val EXTRA_IS_TEST_RUN = "extra_is_test_run"
+        const val EXTRA_LAUNCH_FROM_ALARM = "extra_launch_from_alarm"
         private const val REQUEST_CODE_WATCHDOG = 55001
         private const val REQUEST_CODE_WATCHDOG_SHOW = 55002
 
@@ -109,8 +111,9 @@ class AlarmScheduler(private val context: Context) {
         )
 
         val showIntent = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EXTRA_ALARM_ID, alarm.id)
+            putExtra(EXTRA_LAUNCH_FROM_ALARM, true)
         }
         val showPending = PendingIntent.getActivity(
             context,
@@ -253,6 +256,7 @@ class AlarmScheduler(private val context: Context) {
         val showIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EXTRA_ALARM_ID, alarmId)
+            putExtra(EXTRA_LAUNCH_FROM_ALARM, true)
         }
         val showPending = PendingIntent.getActivity(
             context,

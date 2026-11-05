@@ -1,17 +1,21 @@
 package com.example.alarm
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.backup.BackupPayload
@@ -83,8 +87,10 @@ class AlarmService : Service() {
     private var missionCoordinator: MissionChainCoordinator? = null
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var screenWakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
     private var antiReturnCountdownJob: Job? = null
+    private var screenUnlockReceiverRegistered: Boolean = false
     @Volatile
     private var isVoiceListeningMuted: Boolean = false
     @Volatile
@@ -96,13 +102,38 @@ class AlarmService : Service() {
     @Volatile
     private var activeSessionStartMs: Long = 0L
 
+    /**
+     * Приёмник включения и разблокировки экрана во время активной тревоги:
+     * если пользователь разблокировал экран или нажал кнопку питания, а окно будильника
+     * было свёрнуто/перекрыто, немедленно выводит окно будильника на передний план
+     * и обновляет уведомление в шторке.
+     */
+    private val screenAndUnlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val act = intent?.action ?: return
+            if ((act == Intent.ACTION_USER_PRESENT || act == Intent.ACTION_SCREEN_ON) &&
+                (isSessionActive || _activeUiState.value.isActive)
+            ) {
+                val currentAlarm = _activeUiState.value.alarm
+                if (currentAlarm != null) {
+                    val isSunrise = _activeUiState.value.escalation?.state == AlarmState.PRE_ALARM_SUNRISE
+                    val stage = _activeUiState.value.escalation?.stage ?: 1
+                    val vol = _activeUiState.value.escalation?.volumePercent ?: 50
+                    postNotificationToShade(currentAlarm, isSunrise, stage, vol)
+                    launchFullScreenActivity(currentAlarm.id)
+                }
+            }
+        }
+    }
+
     companion object {
-        const val CHANNEL_ID_ALARM = "alarm_commander_critical_channel"
+        const val CHANNEL_ID_ALARM = "alarm_commander_urgent_v2"
         const val CHANNEL_ID_BACKUP = "alarm_commander_backup_channel"
         const val NOTIFICATION_ID_ALARM = 7001
 
         const val ACTION_START_ALARM = "com.example.service.START_ALARM"
         const val ACTION_WATCHDOG_REVIVE = "com.example.service.WATCHDOG_REVIVE"
+        const val ACTION_RESTORE_NOTIFICATION = "com.example.service.RESTORE_NOTIFICATION"
         const val ACTION_START_SUNRISE = "com.example.service.START_SUNRISE"
         const val ACTION_START_ANTI_RETURN = "com.example.service.START_ANTI_RETURN"
         const val ACTION_CONFIRM_ANTI_RETURN = "com.example.service.CONFIRM_ANTI_RETURN"
@@ -111,7 +142,45 @@ class AlarmService : Service() {
         val activeUiState: StateFlow<ActiveAlarmUiState> = _activeUiState.asStateFlow()
 
         @Volatile
+        private var lastLaunchSignalEpochMs: Long = 0L
+
+        @Volatile
         private var instance: AlarmService? = null
+
+        fun isSessionCurrentlyActive(): Boolean {
+            val now = System.currentTimeMillis()
+            return _activeUiState.value.isActive ||
+                instance?.isSessionActive == true ||
+                (now - lastLaunchSignalEpochMs) in 0..15_000L
+        }
+
+        /**
+         * Вызывается синхронно из AlarmReceiver или ViewModel до запуска корутин БД,
+         * чтобы MainActivity при старте гарантированно знала, что будильник активен,
+         * и не сбрасывала флаги показа поверх экрана блокировки.
+         */
+        fun markAlarmLaunchingFromReceiver(
+            alarmId: Long,
+            isSunrise: Boolean = false,
+            isAntiReturn: Boolean = false
+        ) {
+            lastLaunchSignalEpochMs = System.currentTimeMillis()
+            val cur = _activeUiState.value
+            if (!cur.isActive) {
+                val placeholder = AlarmEntity(
+                    id = if (alarmId > 0L) alarmId else 999L,
+                    hour = 7,
+                    minute = 0,
+                    label = if (isAntiReturn) "Контроль анти-возврата" else "Будильник Alarm Commander"
+                )
+                _activeUiState.value = ActiveAlarmUiState(
+                    isActive = true,
+                    alarm = placeholder,
+                    isAntiReturnPromptActive = isAntiReturn,
+                    antiReturnSecondsRemaining = if (isAntiReturn) 60 else 0
+                )
+            }
+        }
 
         fun notifyMissionStarted() {
             instance?.handleMissionStarted()
@@ -155,12 +224,50 @@ class AlarmService : Service() {
         scheduler = AlarmScheduler(applicationContext)
         audioController = AlarmAudioController(applicationContext)
         ensureNotificationChannels()
+        registerScreenUnlockReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_START_ALARM
         val alarmId = intent?.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L) ?: -1L
         val isTestRun = intent?.getBooleanExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, false) ?: false
+
+        if (action == ACTION_RESTORE_NOTIFICATION) {
+            val activeAlarm = _activeUiState.value.alarm
+            if ((isSessionActive || _activeUiState.value.isActive) && activeAlarm != null) {
+                val isSunrise = _activeUiState.value.escalation?.state == AlarmState.PRE_ALARM_SUNRISE
+                val stage = _activeUiState.value.escalation?.stage ?: 1
+                val vol = _activeUiState.value.escalation?.volumePercent ?: 50
+                startForegroundWithFullScreenNotification(activeAlarm, isSunrise, stage, vol)
+            }
+            return START_STICKY
+        }
+
+        if (action != ACTION_CONFIRM_ANTI_RETURN) {
+            lastLaunchSignalEpochMs = System.currentTimeMillis()
+            acquireWakeLock()
+            val immediateAlarm = _activeUiState.value.alarm ?: AlarmEntity(
+                id = if (alarmId > 0L) alarmId else 999L,
+                hour = 7,
+                minute = 0,
+                label = "Alarm Commander"
+            )
+            if (!_activeUiState.value.isActive) {
+                _activeUiState.value = ActiveAlarmUiState(
+                    isActive = true,
+                    alarm = immediateAlarm,
+                    isAntiReturnPromptActive = action == ACTION_START_ANTI_RETURN,
+                    antiReturnSecondsRemaining = if (action == ACTION_START_ANTI_RETURN) 60 else 0
+                )
+            }
+            // Синхронно поднимаем Foreground-уведомление в шторке в первую миллисекунду onStartCommand
+            startForegroundWithFullScreenNotification(
+                alarm = immediateAlarm,
+                isSunrise = action == ACTION_START_SUNRISE,
+                stage = _activeUiState.value.escalation?.stage ?: 1,
+                volumePercent = _activeUiState.value.escalation?.volumePercent ?: 50
+            )
+        }
 
         serviceScope.launch {
             when (action) {
@@ -415,6 +522,15 @@ class AlarmService : Service() {
                         // Каждые 3 секунды продлеваем сторожевой таймер в AlarmManager,
                         // чтобы при закрытии приложения через «Закрыть все» оно перезапустилось через ~3–4 сек
                         scheduler.scheduleWatchdogRevive(alarm.id, isCurrentSessionTestRun, delayMs = 4_500L)
+                    }
+                    if (isSessionActive && watchdogTick % 2 == 0) {
+                        // Поддерживаем постоянное уведомление в шторке Android с актуальной стадией и кнопкой возврата в окно миссии
+                        postNotificationToShade(
+                            alarm = alarm,
+                            isSunrise = snap.state == AlarmState.PRE_ALARM_SUNRISE,
+                            stage = snap.stage,
+                            volumePercent = snap.volumePercent
+                        )
                     }
                     watchdogTick++
 
@@ -733,6 +849,7 @@ class AlarmService : Service() {
     private fun stopCurrentSession(reason: String, finalState: AlarmState) {
         isSessionActive = false
         activeAlarmIdInMemory = -1L
+        lastLaunchSignalEpochMs = 0L
         isVoiceListeningMuted = false
         scheduler.cancelWatchdogRevive()
         tickerJob?.cancel()
@@ -755,6 +872,10 @@ class AlarmService : Service() {
                 )
             }
             releaseWakeLock()
+            runCatching {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIFICATION_ID_ALARM)
+            }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -772,42 +893,81 @@ class AlarmService : Service() {
         }.ifEmpty { listOf(MathMission(alarm.mathDifficultyEnum)) }
     }
 
-    private fun startForegroundWithFullScreenNotification(alarm: AlarmEntity, isSunrise: Boolean) {
+    private fun buildAlarmNotification(
+        alarm: AlarmEntity,
+        isSunrise: Boolean,
+        stage: Int = 1,
+        volumePercent: Int = 50
+    ): Notification {
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
             putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarm.id)
+            putExtra(AlarmScheduler.EXTRA_LAUNCH_FROM_ALARM, true)
         }
         val fullScreenPending = PendingIntent.getActivity(
             this,
-            alarm.id.toInt(),
+            alarm.id.toInt().coerceAtLeast(1),
             fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val restoreIntent = Intent(this, AlarmReceiver::class.java).apply {
+            action = AlarmScheduler.ACTION_RESTORE_ALARM_NOTIFICATION
+            putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarm.id)
+        }
+        val restorePending = PendingIntent.getBroadcast(
+            this,
+            55099,
+            restoreIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val title = if (isSunrise) {
             "Рассвет T−15 • ${alarm.label}"
         } else {
-            "БОЕВАЯ ТРЕВОГА • ${alarm.label}"
+            "БОЕВАЯ ТРЕВОГА (ЭТАП $stage/4) • ${alarm.label}"
         }
         val body = if (isSunrise) {
-            "Мягкая подготовка к пробуждению"
+            "Мягкая подготовка к пробуждению • Нажмите, чтобы открыть"
         } else {
-            "Выполните миссию (${alarm.missionChainCsv}), чтобы отключить сигнал"
+            "Нажмите сюда, чтобы открыть окно будильника и пройти миссию (${alarm.missionChainCsv}) • Громкость $volumePercent%"
         }
 
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID_ALARM)
+        return NotificationCompat.Builder(this, CHANNEL_ID_ALARM)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setOngoing(true)
             .setAutoCancel(false)
+            .setOnlyAlertOnce(true)
+            .setDeleteIntent(restorePending)
             .setFullScreenIntent(fullScreenPending, true)
             .setContentIntent(fullScreenPending)
+            .addAction(
+                android.R.drawable.ic_lock_idle_alarm,
+                "ОТКРЫТЬ ОКНО БУДИЛЬНИКА",
+                fullScreenPending
+            )
             .build()
+    }
 
+    private fun startForegroundWithFullScreenNotification(
+        alarm: AlarmEntity,
+        isSunrise: Boolean,
+        stage: Int = 1,
+        volumePercent: Int = 50
+    ) {
+        val notification = buildAlarmNotification(alarm, isSunrise, stage, volumePercent)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID_ALARM,
@@ -819,12 +979,53 @@ class AlarmService : Service() {
         }
     }
 
-    private fun launchFullScreenActivity(alarmId: Long) {
+    private fun postNotificationToShade(
+        alarm: AlarmEntity,
+        isSunrise: Boolean,
+        stage: Int = 1,
+        volumePercent: Int = 50
+    ) {
         runCatching {
-            val activityIntent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId)
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notification = buildAlarmNotification(alarm, isSunrise, stage, volumePercent)
+            nm.notify(NOTIFICATION_ID_ALARM, notification)
+        }
+    }
+
+    private fun launchFullScreenActivity(alarmId: Long) {
+        val activityIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
+            putExtra(AlarmScheduler.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmScheduler.EXTRA_LAUNCH_FROM_ALARM, true)
+        }
+
+        // 1. Попытка запуска через PendingIntent с явным разрешением фонового старта для Android 14–16 (API 34+)
+        runCatching {
+            val pending = PendingIntent.getActivity(
+                this,
+                (60000 + (alarmId % 1000)).toInt(),
+                activityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val options = ActivityOptions.makeBasic().apply {
+                    setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                }
+                pending.send(this, 0, null, null, null, null, options.toBundle())
+            } else {
+                pending.send()
             }
+        }
+
+        // 2. Прямой вызов startActivity для мгновенного вывода окна поверх блокировки
+        runCatching {
             startActivity(activityIntent)
         }
     }
@@ -841,7 +1042,8 @@ class AlarmService : Service() {
                 description = getString(R.string.notif_channel_alarm_desc)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setBypassDnd(true)
-                enableVibration(true)
+                enableVibration(false)
+                setSound(null, null)
             }
 
             val backupChannel = NotificationChannel(
@@ -858,15 +1060,53 @@ class AlarmService : Service() {
         }
     }
 
+    private fun registerScreenUnlockReceiver() {
+        if (screenUnlockReceiverRegistered) return
+        runCatching {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            ContextCompat.registerReceiver(
+                this,
+                screenAndUnlockReceiver,
+                filter,
+                ContextCompat.RECEIVER_EXPORTED
+            )
+            screenUnlockReceiverRegistered = true
+        }
+    }
+
+    private fun unregisterScreenUnlockReceiver() {
+        if (!screenUnlockReceiverRegistered) return
+        runCatching {
+            unregisterReceiver(screenAndUnlockReceiver)
+        }
+        screenUnlockReceiverRegistered = false
+    }
+
     private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "AlarmCommander::AlarmRingWakeLock"
-        ).apply {
-            setReferenceCounted(false)
-            acquire(10 * 60 * 1000L) // Строгий лимит 10 минут удержания CPU для защиты батареи
+        if (wakeLock?.isHeld != true) {
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "AlarmCommander::AlarmRingWakeLock"
+            ).apply {
+                setReferenceCounted(false)
+                acquire(10 * 60 * 1000L) // Строгий лимит 10 минут удержания CPU для защиты батареи
+            }
+        }
+        if (screenWakeLock?.isHeld != true) {
+            @Suppress("DEPRECATION")
+            screenWakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                "AlarmCommander::AlarmScreenWakeLock"
+            ).apply {
+                setReferenceCounted(false)
+                runCatching { acquire(20_000L) }
+            }
         }
     }
 
@@ -877,6 +1117,12 @@ class AlarmService : Service() {
             }
         }
         wakeLock = null
+        runCatching {
+            if (screenWakeLock?.isHeld == true) {
+                screenWakeLock?.release()
+            }
+        }
+        screenWakeLock = null
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -903,6 +1149,7 @@ class AlarmService : Service() {
         val reviveAlarmId = activeAlarmIdInMemory
         val reviveTestFlag = isCurrentSessionTestRun
 
+        unregisterScreenUnlockReceiver()
         instance = null
         tickerJob?.cancel()
         antiReturnCountdownJob?.cancel()

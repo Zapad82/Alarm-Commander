@@ -1,15 +1,17 @@
 package com.example
 
-import android.app.KeyguardManager
-import android.content.Context
+import android.Manifest
+import android.content.Intent
 import android.nfc.NfcAdapter
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,6 +54,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.alarm.AlarmScheduler
 import com.example.alarm.AlarmService
 import com.example.data.AlarmState
 import com.example.data.MissionType
@@ -76,8 +80,9 @@ class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val initialWakeActive = isAlarmWakeRequired(intent)
+        updateLockscreenWakeFlags(initialWakeActive)
         super.onCreate(savedInstanceState)
-        updateLockscreenWakeFlags(AlarmService.activeUiState.value.isActive)
         enableEdgeToEdge()
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
@@ -88,15 +93,25 @@ class MainActivity : ComponentActivity() {
                     if (active) enableNfcReaderIfAvailable() else disableNfcReader()
                 },
                 onSetLockscreenWakeActive = { active ->
+                    if (!active) {
+                        intent?.removeExtra(AlarmScheduler.EXTRA_LAUNCH_FROM_ALARM)
+                        intent?.removeExtra(AlarmScheduler.EXTRA_ALARM_ID)
+                    }
                     updateLockscreenWakeFlags(active)
                 }
             )
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        updateLockscreenWakeFlags(isAlarmWakeRequired(intent))
+    }
+
     override fun onResume() {
         super.onResume()
-        updateLockscreenWakeFlags(AlarmService.activeUiState.value.isActive)
+        updateLockscreenWakeFlags(isAlarmWakeRequired(intent))
         viewModel.refreshPermissions()
     }
 
@@ -105,29 +120,32 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    private fun isAlarmWakeRequired(checkIntent: Intent?): Boolean {
+        val hasLaunchExtra = checkIntent?.getBooleanExtra(AlarmScheduler.EXTRA_LAUNCH_FROM_ALARM, false) == true ||
+            (checkIntent?.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L) ?: -1L) > 0L
+        return AlarmService.isSessionCurrentlyActive() || hasLaunchExtra
+    }
+
+    /**
+     * Управляет показом окна поверх заблокированного экрана.
+     * ВАЖНО: намеренно НЕ вызываем KeyguardManager.requestDismissKeyguard(),
+     * так как requestDismissKeyguard принудительно вызывает системный экран ввода PIN/отпечатка
+     * поверх будильника и мешает пройти миссию без разблокировки телефона.
+     */
     private fun updateLockscreenWakeFlags(active: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(active)
             setTurnScreenOn(active)
-            if (active) {
-                val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                km?.requestDismissKeyguard(this, null)
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            val legacyFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            if (active) {
-                window.addFlags(legacyFlags)
-            } else {
-                window.clearFlags(legacyFlags)
-            }
         }
+        @Suppress("DEPRECATION")
+        val legacyFlags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON
         if (active) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.addFlags(legacyFlags)
         } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.clearFlags(legacyFlags)
         }
     }
 
@@ -196,16 +214,37 @@ fun AlarmCommanderApp(
         AppThemeMode.SYSTEM -> systemDark
     }
 
+    var autoRequestedNotifPermission by remember { mutableStateOf(false) }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.refreshPermissions()
+    }
+
     MyApplicationTheme(darkTheme = useDarkTheme) {
         CompositionLocalProvider(LocalAppStrings provides appStrings) {
             val s = LocalAppStrings.current
             val snackbarHostState = remember { SnackbarHostState() }
             var currentTab by remember { mutableIntStateOf(0) }
 
-            // Включаем показ поверх экрана блокировки ТОЛЬКО когда реально звенит будильник или идет проверка Анти-возврата
-            DisposableEffect(activeAlarmState.isActive) {
-                onSetLockscreenWakeActive(activeAlarmState.isActive)
-                onDispose {
+            // Автоматически запрашиваем разрешение на уведомления в шторке (Android 13+) после принятия дисклеймера
+            LaunchedEffect(settings.disclaimerAccepted, activeAlarmState.isActive) {
+                if (settings.disclaimerAccepted &&
+                    !activeAlarmState.isActive &&
+                    !autoRequestedNotifPermission &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !viewModel.permissionManager.isPostNotificationsGranted()
+                ) {
+                    autoRequestedNotifPermission = true
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+
+            // Включаем показ поверх экрана блокировки, когда активна тревога или идет её запуск
+            LaunchedEffect(activeAlarmState.isActive) {
+                if (activeAlarmState.isActive) {
+                    onSetLockscreenWakeActive(true)
+                } else if (!AlarmService.isSessionCurrentlyActive()) {
                     onSetLockscreenWakeActive(false)
                 }
             }
@@ -405,6 +444,8 @@ fun AlarmCommanderApp(
                             defaultSoundSource = settings.defaultSoundSource,
                             defaultRingtoneUri = settings.customRingtoneUri,
                             defaultRingtoneTitle = settings.customRingtoneTitle,
+                            permissionManager = viewModel.permissionManager,
+                            onRefreshPermissions = viewModel::refreshPermissions,
                             onAcceptDisclaimer = viewModel::acceptDisclaimer,
                             onSaveAlarm = viewModel::saveAlarm,
                             onToggleAlarm = viewModel::toggleAlarmEnabled,
