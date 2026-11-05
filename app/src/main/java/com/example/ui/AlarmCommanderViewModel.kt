@@ -92,7 +92,6 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
 
             val sessionAgeMs = nowMs - snap.activeSessionStartEpochMs
             if (snap.activeAlarmId > 0L &&
-                snap.activeAlarmId != 999L &&
                 sessionAgeMs in 1..600_000L &&
                 snap.activeAlarmState in setOf(
                     AlarmState.RINGING,
@@ -105,7 +104,7 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
                 val recoverIntent = Intent(appContext, AlarmService::class.java).apply {
                     action = AlarmService.ACTION_START_ALARM
                     putExtra(AlarmScheduler.EXTRA_ALARM_ID, snap.activeAlarmId)
-                    putExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, false)
+                    putExtra(AlarmScheduler.EXTRA_IS_TEST_RUN, snap.activeIsTestRun || snap.activeAlarmId == 999L)
                 }
                 ContextCompat.startForegroundService(appContext, recoverIntent)
             } else if (snap.activeAlarmId > 0L && !AlarmService.activeUiState.value.isActive) {

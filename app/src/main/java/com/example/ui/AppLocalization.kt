@@ -273,7 +273,7 @@ val RussianStrings = AppStrings(
     rightStepBtn = "ПРАВЫЙ ШАГ (+5)",
     qrExpectedLabel = { "Ожидается QR: $it" },
     enableCameraQrBtn = "Включить камеру для сканирования QR",
-    qrFallbackHint = "Резервный ввод (если камера недоступна): введите точный код метки вручную",
+    qrFallbackHint = "Нет нужного QR-кода? Отсканируйте любой другой QR/штрихкод 5 раз подряд (или нажмите кнопку ниже 5 раз) для перехода в резервный режим Математики",
     qrInputLabel = { "Код метки ($it)" },
     submitQrBtn = "ПОДТВЕРДИТЬ КОД МЕТКИ",
     nfcTitle = "Приложите смартфон к NFC-метке",
@@ -426,7 +426,7 @@ val EnglishStrings = AppStrings(
     rightStepBtn = "RIGHT STEP (+5)",
     qrExpectedLabel = { "Expected QR: $it" },
     enableCameraQrBtn = "Enable Camera for QR Scanning",
-    qrFallbackHint = "Fallback input (if camera is unavailable): enter the exact QR code string manually",
+    qrFallbackHint = "No target QR prepared? Scan any other QR/barcode 5 times (or tap Confirm 5 times) to switch to Math fallback mode",
     qrInputLabel = { "QR Code ($it)" },
     submitQrBtn = "CONFIRM QR CODE",
     nfcTitle = "Hold your phone against the NFC tag",
@@ -563,6 +563,14 @@ fun String.localizeRuntimeText(isEnglish: Boolean): String {
         "ПОДТВЕРЖДАЮ ПЕРЕНОС 5 МИН" -> return "I CONFIRM 5 MIN SNOOZE"
         "Датчик движения активен" -> return "Motion sensor active"
         "Ожидание сканирования QR-кода..." -> return "Waiting for QR code scan..."
+        "Отсканируйте целевой QR-код (или любой код 5 раз для перехода к математике)" ->
+            return "Scan the target QR code (or any code 5 times to switch to Math)"
+        "5 неверных попыток QR-кода: активировано резервное отключение через Математику!" ->
+            return "5 failed QR attempts: switched to backup Math dismissal mode!"
+        "5 неверных попыток сканирования QR-кода: миссия автоматически переведена в режим Математики" ->
+            return "5 failed QR scan attempts: mission automatically switched to Math mode"
+        "Автозапуск защиты пробуждения: будильник восстановлен после закрытия из списка недавних приложений" ->
+            return "Wake-up Watchdog relaunch: alarm restored after being closed from Recent Apps"
         "NFC-ридер ожидает касания метки" -> return "NFC reader waiting for tag tap"
         "Произнесите контрольную фразу чётко вслух" -> return "Speak the verification phrase clearly aloud"
         "Ошибка! Попробуйте ещё раз без автопилота." -> return "Incorrect! Try again without autopilot."
@@ -649,6 +657,12 @@ fun String.localizeRuntimeText(isEnglish: Boolean): String {
     }
     Regex("""Встаньте с кровати и пройдите (\d+) шагов""").find(translated)?.let { m ->
         return "Get out of bed and walk ${m.groupValues[1]} steps"
+    }
+    Regex("""Неверный QR-код \((.*)\): попытка (\d+) из (\d+)\. Ещё (\d+) — и включится математика\.""").find(translated)?.let { m ->
+        return "Wrong QR code (${m.groupValues[1]}): attempt ${m.groupValues[2]} of ${m.groupValues[3]}. ${m.groupValues[4]} more to switch to Math."
+    }
+    Regex("""Неверный QR-код \((.*)\): попытка (\d+) из (\d+)\. Переключаем на математику\.\.\.""").find(translated)?.let { m ->
+        return "Wrong QR code (${m.groupValues[1]}): attempt ${m.groupValues[2]} of ${m.groupValues[3]}. Switching to Math..."
     }
     Regex("""Неверный QR-код \(«(.*)»\)\. Нужен код: «(.*)»""").find(translated)?.let { m ->
         return "Wrong QR code (\"${m.groupValues[1]}\"). Expected: \"${m.groupValues[2]}\""

@@ -19,6 +19,7 @@ class AlarmScheduler(private val context: Context) {
 
     companion object {
         const val ACTION_TRIGGER_ALARM = "com.example.action.TRIGGER_ALARM"
+        const val ACTION_WATCHDOG_REVIVE = "com.example.action.WATCHDOG_REVIVE"
         const val ACTION_PRE_ALARM_SUNRISE = "com.example.action.PRE_ALARM_SUNRISE"
         const val ACTION_ANTI_RETURN_CHECK = "com.example.action.ANTI_RETURN_CHECK"
         const val ACTION_DISMISS_ANTI_RETURN = "com.example.action.DISMISS_ANTI_RETURN"
@@ -27,6 +28,8 @@ class AlarmScheduler(private val context: Context) {
         const val EXTRA_IS_SUNRISE = "extra_is_sunrise"
         const val EXTRA_IS_ANTI_RETURN = "extra_is_anti_return"
         const val EXTRA_IS_TEST_RUN = "extra_is_test_run"
+        private const val REQUEST_CODE_WATCHDOG = 55001
+        private const val REQUEST_CODE_WATCHDOG_SHOW = 55002
 
         /**
          * Вычисляет ближайшее время срабатывания в миллисекундах (epoch ms).
@@ -226,6 +229,65 @@ class AlarmScheduler(private val context: Context) {
                 alarmManager.cancel(pending)
                 pending.cancel()
             }
+        }
+    }
+
+    /**
+     * Планирует сторожевой автозапуск (Watchdog) в AlarmManager на случай принудительного закрытия
+     * приложения через меню недавних («Закрыть все приложения») во время активного звонка.
+     */
+    fun scheduleWatchdogRevive(alarmId: Long, isTestRun: Boolean, delayMs: Long = 5_000L) {
+        val triggerAtMs = System.currentTimeMillis() + delayMs.coerceAtLeast(1_500L)
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = ACTION_WATCHDOG_REVIVE
+            putExtra(EXTRA_ALARM_ID, alarmId)
+            putExtra(EXTRA_IS_TEST_RUN, isTestRun)
+        }
+        val triggerPending = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_WATCHDOG,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val showIntent = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(EXTRA_ALARM_ID, alarmId)
+        }
+        val showPending = PendingIntent.getActivity(
+            context,
+            REQUEST_CODE_WATCHDOG_SHOW,
+            showIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+
+        if (canExact) {
+            val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMs, showPending)
+            alarmManager.setAlarmClock(clockInfo, triggerPending)
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, triggerPending)
+        }
+    }
+
+    fun cancelWatchdogRevive() {
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = ACTION_WATCHDOG_REVIVE
+        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_WATCHDOG,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pending != null) {
+            alarmManager.cancel(pending)
+            pending.cancel()
         }
     }
 

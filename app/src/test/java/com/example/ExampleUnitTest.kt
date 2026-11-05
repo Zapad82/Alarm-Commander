@@ -211,6 +211,46 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun missionChainCoordinator_switchesFromQrToMathAfterFiveFailedAttempts() {
+        val qrMission = QrMission(expectedPayload = "BATHROOM-QR", maxFailedAttempts = 5)
+        val coordinator = MissionChainCoordinator(
+            missions = listOf(qrMission),
+            fallbackMathDifficulty = MathDifficulty.EASY
+        )
+
+        coordinator.startCurrent()
+        assertEquals(com.example.data.MissionType.QR, coordinator.currentMission()?.type)
+
+        // Первые 4 неверных сканирования оставляют миссию в режиме QR
+        for (attempt in 1..4) {
+            val (finished, res) = coordinator.submitInput(MissionInput.QrPayloadScanned("ANY-OTHER-BARCODE-$attempt"))
+            assertFalse(finished)
+            assertTrue(res is MissionResult.Failed)
+            assertEquals(com.example.data.MissionType.QR, coordinator.currentMission()?.type)
+        }
+
+        // На 5-й неверной попытке миссия автоматически переключается на MathMission
+        val (finishedOn5th, fifthRes) = coordinator.submitInput(MissionInput.QrPayloadScanned("ANY-OTHER-BARCODE-5"))
+        assertFalse(finishedOn5th)
+        assertTrue(fifthRes is MissionResult.Progress)
+        assertEquals(com.example.data.MissionType.MATH, coordinator.currentMission()?.type)
+
+        // Теперь пользователь решает 3 примера математики и штатно отключает будильник
+        for (step in 1..3) {
+            val mathMission = coordinator.currentMission() as MathMission
+            val problem = mathMission.getCurrentProblem()
+            val (done, mathRes) = coordinator.submitInput(MissionInput.MathAnswer(problem.expectedAnswer))
+            if (step < 3) {
+                assertFalse(done)
+                assertTrue(mathRes is MissionResult.Progress)
+            } else {
+                assertTrue(done)
+                assertTrue(mathRes is MissionResult.Completed)
+            }
+        }
+    }
+
+    @Test
     fun alarmScheduler_computesFutureTriggerEpochMs() {
         val now = 1_700_000_000_000L
         val next = AlarmScheduler.computeNextTriggerEpochMs(

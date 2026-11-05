@@ -167,15 +167,23 @@ class StepsMission(
 }
 
 /**
- * 3. Миссия «QR-код в ванной».
+ * 3. Миссия «QR-код в ванной» с автоматическим резервным переключением на Математику
+ *    после 5 неверных сканирований/попыток (если целевой QR-код не подготовлен или утерян).
  */
 class QrMission(
-    private val expectedPayload: String = "ALARM-COMMANDER-BATHROOM-01"
+    private val expectedPayload: String = "ALARM-COMMANDER-BATHROOM-01",
+    private val maxFailedAttempts: Int = 5
 ) : Mission {
 
     override val type: MissionType = MissionType.QR
+    private var failedAttempts: Int = 0
+
+    fun getFailedAttempts(): Int = failedAttempts
+
+    fun isFallbackToMathTriggered(): Boolean = failedAttempts >= maxFailedAttempts
 
     override fun start(): MissionResult.Progress {
+        failedAttempts = 0
         return MissionResult.Progress(
             currentStep = 0,
             totalSteps = 1,
@@ -195,16 +203,21 @@ class QrMission(
             normalizedActual.equals(normalizedExpected, ignoreCase = true)
 
         return if (matches && normalizedActual.isNotEmpty()) {
+            failedAttempts = 0
             MissionResult.Completed("Контрольный QR-код подтверждён: $normalizedActual")
         } else {
+            failedAttempts++
+            val displayCode = normalizedActual.ifBlank { "без кода" }
             MissionResult.Failed(
-                reason = "Неверный QR-код («$normalizedActual»). Нужен код: «$normalizedExpected»",
+                reason = "Неверный QR-код («$displayCode»): попытка $failedAttempts из $maxFailedAttempts. При $maxFailedAttempts попытках включится Математика.",
                 currentPrompt = expectedPayload
             )
         }
     }
 
-    override fun cancel() = Unit
+    override fun cancel() {
+        failedAttempts = 0
+    }
 }
 
 /**
@@ -327,47 +340,66 @@ class VoicePhraseMission(
 /**
  * Координатор цепочки миссий (Mission Chain Validator).
  * Последовательно проводит пользователя через все назначенные миссии (например: QR -> Математика -> Голос).
+ * Если в миссии QR-кода совершено 5 неверных попыток (например, QR-код не подготовлен),
+ * автоматически переводит текущий этап в режим Математики для резервного отключения.
  */
 class MissionChainCoordinator(
-    private val missions: List<Mission>
+    missions: List<Mission>,
+    private val fallbackMathDifficulty: MathDifficulty = MathDifficulty.MEDIUM
 ) {
+    private val mutableMissions: MutableList<Mission> = missions.toMutableList()
     private var currentIndex: Int = 0
 
     init {
-        require(missions.isNotEmpty()) { "Цепочка миссий не может быть пустой" }
+        require(mutableMissions.isNotEmpty()) { "Цепочка миссий не может быть пустой" }
     }
 
-    fun currentMission(): Mission = missions[currentIndex.coerceIn(0, missions.lastIndex)]
+    fun currentMission(): Mission = mutableMissions[currentIndex.coerceIn(0, mutableMissions.lastIndex)]
 
     fun currentMissionIndex(): Int = currentIndex
 
-    fun totalMissionsCount(): Int = missions.size
+    fun totalMissionsCount(): Int = mutableMissions.size
 
     fun startCurrent(): MissionResult.Progress = currentMission().start()
 
     fun setMissionIndex(index: Int): MissionResult.Progress {
-        currentIndex = index.coerceIn(0, missions.lastIndex)
+        currentIndex = index.coerceIn(0, mutableMissions.lastIndex)
         return currentMission().start()
     }
 
     /**
      * Проверяет ввод для текущей миссии. Если текущая миссия завершена и в цепочке есть следующая —
-     * автоматически переключает на следующую миссию.
+     * автоматически переключает на следующая миссию.
+     * Если в миссии QR достигнут лимит 5 неверных попыток — заменяет текущую миссию на Математику.
      */
     fun submitInput(input: MissionInput): Pair<Boolean, MissionResult> {
-        val result = currentMission().validate(input)
-        return if (result is MissionResult.Completed) {
-            if (currentIndex + 1 < missions.size) {
-                currentIndex++
-                val nextProgress = currentMission().start()
-                false to nextProgress.copy(
-                    feedbackMessage = "Этап ${currentIndex}/${missions.size} пройден! Следующая миссия: ${currentMission().type.titleRu}"
-                )
-            } else {
-                true to result
+        val activeMission = currentMission()
+        val result = activeMission.validate(input)
+        return when {
+            result is MissionResult.Completed -> {
+                if (currentIndex + 1 < mutableMissions.size) {
+                    currentIndex++
+                    val nextProgress = currentMission().start()
+                    false to nextProgress.copy(
+                        feedbackMessage = "Этап ${currentIndex}/${mutableMissions.size} пройден! Следующая миссия: ${currentMission().type.titleRu}"
+                    )
+                } else {
+                    true to result
+                }
             }
-        } else {
-            false to result
+            result is MissionResult.Failed &&
+                activeMission is QrMission &&
+                activeMission.isFallbackToMathTriggered() -> {
+                val mathFallback = MathMission(difficulty = fallbackMathDifficulty)
+                mutableMissions[currentIndex.coerceIn(0, mutableMissions.lastIndex)] = mathFallback
+                val mathProgress = mathFallback.start()
+                false to mathProgress.copy(
+                    feedbackMessage = "5 неверных попыток QR-кода: активировано резервное отключение через Математику!"
+                )
+            }
+            else -> {
+                false to result
+            }
         }
     }
 }

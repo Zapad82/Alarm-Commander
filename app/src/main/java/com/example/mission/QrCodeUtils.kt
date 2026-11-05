@@ -42,7 +42,14 @@ class ZxingQrCodeAnalyzer(
     private val reader = MultiFormatReader().apply {
         setHints(
             mapOf(
-                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.POSSIBLE_FORMATS to listOf(
+                    BarcodeFormat.QR_CODE,
+                    BarcodeFormat.EAN_13,
+                    BarcodeFormat.EAN_8,
+                    BarcodeFormat.UPC_A,
+                    BarcodeFormat.CODE_128,
+                    BarcodeFormat.DATA_MATRIX
+                ),
                 DecodeHintType.TRY_HARDER to true
             )
         )
@@ -74,7 +81,7 @@ class ZxingQrCodeAnalyzer(
             val result = runCatching { reader.decodeWithState(bitmap) }.getOrNull()
             if (result != null && !result.text.isNullOrBlank()) {
                 val now = System.currentTimeMillis()
-                if (now - lastDispatchedAtMs > 1200L) {
+                if (now - lastDispatchedAtMs > 900L) {
                     lastDispatchedAtMs = now
                     onQrDetected(result.text.trim())
                 }

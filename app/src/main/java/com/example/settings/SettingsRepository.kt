@@ -43,6 +43,7 @@ data class CommanderSettingsState(
     val activeEscalationStage: Int = 0,
     val activeMissionIndex: Int = 0,
     val activeSessionStartEpochMs: Long = 0L,
+    val activeIsTestRun: Boolean = false,
     val antiReturnAlarmId: Long = -1L,
     val antiReturnDeadlineEpochMs: Long = 0L
 )
@@ -72,6 +73,7 @@ class SettingsRepository(private val context: Context) {
         val ACTIVE_ESCALATION_STAGE = intPreferencesKey("active_escalation_stage")
         val ACTIVE_MISSION_INDEX = intPreferencesKey("active_mission_index")
         val ACTIVE_SESSION_START_MS = longPreferencesKey("active_session_start_ms")
+        val ACTIVE_IS_TEST_RUN = booleanPreferencesKey("active_is_test_run")
         val ANTI_RETURN_ALARM_ID = longPreferencesKey("anti_return_alarm_id")
         val ANTI_RETURN_DEADLINE_MS = longPreferencesKey("anti_return_deadline_ms")
     }
@@ -102,6 +104,7 @@ class SettingsRepository(private val context: Context) {
             activeEscalationStage = prefs[Keys.ACTIVE_ESCALATION_STAGE] ?: 0,
             activeMissionIndex = prefs[Keys.ACTIVE_MISSION_INDEX] ?: 0,
             activeSessionStartEpochMs = prefs[Keys.ACTIVE_SESSION_START_MS] ?: 0L,
+            activeIsTestRun = prefs[Keys.ACTIVE_IS_TEST_RUN] ?: false,
             antiReturnAlarmId = prefs[Keys.ANTI_RETURN_ALARM_ID] ?: -1L,
             antiReturnDeadlineEpochMs = prefs[Keys.ANTI_RETURN_DEADLINE_MS] ?: 0L
         )
@@ -168,7 +171,8 @@ class SettingsRepository(private val context: Context) {
         state: AlarmState,
         escalationStage: Int,
         missionIndex: Int,
-        sessionStartEpochMs: Long
+        sessionStartEpochMs: Long,
+        isTestRun: Boolean = false
     ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.ACTIVE_ALARM_ID] = alarmId
@@ -176,6 +180,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.ACTIVE_ESCALATION_STAGE] = escalationStage
             prefs[Keys.ACTIVE_MISSION_INDEX] = missionIndex
             prefs[Keys.ACTIVE_SESSION_START_MS] = sessionStartEpochMs
+            prefs[Keys.ACTIVE_IS_TEST_RUN] = isTestRun
         }
     }
 
@@ -186,6 +191,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.ACTIVE_ESCALATION_STAGE] = 0
             prefs[Keys.ACTIVE_MISSION_INDEX] = 0
             prefs[Keys.ACTIVE_SESSION_START_MS] = 0L
+            prefs[Keys.ACTIVE_IS_TEST_RUN] = false
         }
     }
 

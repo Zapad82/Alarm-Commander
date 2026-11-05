@@ -89,6 +89,12 @@ class AlarmService : Service() {
     private var isVoiceListeningMuted: Boolean = false
     @Volatile
     private var isCurrentSessionTestRun: Boolean = false
+    @Volatile
+    private var isSessionActive: Boolean = false
+    @Volatile
+    private var activeAlarmIdInMemory: Long = -1L
+    @Volatile
+    private var activeSessionStartMs: Long = 0L
 
     companion object {
         const val CHANNEL_ID_ALARM = "alarm_commander_critical_channel"
@@ -96,6 +102,7 @@ class AlarmService : Service() {
         const val NOTIFICATION_ID_ALARM = 7001
 
         const val ACTION_START_ALARM = "com.example.service.START_ALARM"
+        const val ACTION_WATCHDOG_REVIVE = "com.example.service.WATCHDOG_REVIVE"
         const val ACTION_START_SUNRISE = "com.example.service.START_SUNRISE"
         const val ACTION_START_ANTI_RETURN = "com.example.service.START_ANTI_RETURN"
         const val ACTION_CONFIRM_ANTI_RETURN = "com.example.service.CONFIRM_ANTI_RETURN"
@@ -171,20 +178,21 @@ class AlarmService : Service() {
                     )
                 }
                 else -> {
-                    if (alarmId > 0L) {
+                    val isWatchdog = action == ACTION_WATCHDOG_REVIVE
+                    if (alarmId > 0L && !isWatchdog) {
                         startAlarmOrSunriseSession(
                             alarmId = alarmId,
                             isSunrise = false,
-                            isTestRun = isTestRun
+                            isTestRun = isTestRun,
+                            isWatchdogRevive = false
                         )
                     } else {
-                        // Если сервис перезапущен системой после Process Death (intent == null),
-                        // восстанавливаем только недавнюю (не старше 10 минут) реальную тревогу
+                        // Восстановление после выгрузки приложения («Закрыть все приложения») или по сигналу Watchdog
                         val snap = settingsRepository.getSnapshot()
+                        val targetId = if (alarmId > 0L) alarmId else snap.activeAlarmId
                         val ageMs = System.currentTimeMillis() - snap.activeSessionStartEpochMs
-                        if (snap.activeAlarmId > 0L &&
-                            snap.activeAlarmId != 999L &&
-                            ageMs in 1..600_000L &&
+                        if (targetId > 0L &&
+                            ageMs in 0..600_000L &&
                             snap.activeAlarmState in setOf(
                                 AlarmState.RINGING,
                                 AlarmState.ESCALATING,
@@ -193,11 +201,20 @@ class AlarmService : Service() {
                             )
                         ) {
                             startAlarmOrSunriseSession(
-                                alarmId = snap.activeAlarmId,
+                                alarmId = targetId,
                                 isSunrise = false,
-                                isTestRun = false
+                                isTestRun = snap.activeIsTestRun || isTestRun,
+                                isWatchdogRevive = true
+                            )
+                        } else if (alarmId > 0L && !isWatchdog) {
+                            startAlarmOrSunriseSession(
+                                alarmId = alarmId,
+                                isSunrise = false,
+                                isTestRun = isTestRun,
+                                isWatchdogRevive = false
                             )
                         } else {
+                            scheduler.cancelWatchdogRevive()
                             settingsRepository.clearActiveAlarmSession()
                             stopSelf()
                         }
@@ -211,7 +228,8 @@ class AlarmService : Service() {
     private suspend fun startAlarmOrSunriseSession(
         alarmId: Long,
         isSunrise: Boolean,
-        isTestRun: Boolean = false
+        isTestRun: Boolean = false,
+        isWatchdogRevive: Boolean = false
     ) {
         val savedSettings = settingsRepository.getSnapshot()
         val alarm = (if (alarmId > 0L) repository.getAlarmById(alarmId) else null)
@@ -233,31 +251,59 @@ class AlarmService : Service() {
                 customRingtoneTitle = savedSettings.customRingtoneTitle
             )
 
+        val nowMs = System.currentTimeMillis()
+        val isContinuingAfterKill = isWatchdogRevive &&
+            savedSettings.activeAlarmId == alarm.id &&
+            savedSettings.activeSessionStartEpochMs > 0L &&
+            (nowMs - savedSettings.activeSessionStartEpochMs) in 0..600_000L
+
+        val effectiveStartMs = if (isContinuingAfterKill) {
+            savedSettings.activeSessionStartEpochMs
+        } else {
+            nowMs
+        }
+
         val started = escalationEngine.startSession(
             alarmId = alarm.id,
             profile = alarm.profileEnum,
+            nowEpochMs = effectiveStartMs,
             isSunrisePreAlarm = isSunrise
         )
-        if (!started) return
+        if (!started) {
+            // Если сервис уже работает в памяти, а пользователь закрыл окно будильника через «Недавние» —
+            // немедленно возвращаем уведомление и разворачиваем экран будильника обратно!
+            if (isSessionActive) {
+                startForegroundWithFullScreenNotification(alarm, isSunrise)
+                launchFullScreenActivity(alarm.id)
+                if (!isSunrise) {
+                    scheduler.scheduleWatchdogRevive(alarm.id, isCurrentSessionTestRun, delayMs = 4_000L)
+                }
+            }
+            return
+        }
 
         isCurrentSessionTestRun = isTestRun || alarm.id == 999L
+        isSessionActive = true
+        activeAlarmIdInMemory = alarm.id
+        activeSessionStartMs = effectiveStartMs
+
         scheduler.cancelAntiReturnCheck(alarm.id)
         settingsRepository.clearAntiReturnSession()
 
         acquireWakeLock()
         startForegroundWithFullScreenNotification(alarm, isSunrise)
 
-        // Перепланируем следующий цикл, если это реальный периодический будильник (не ручной тест)
-        if (!isSunrise && !isCurrentSessionTestRun && alarm.id != 999L && alarm.daysOfWeek.isNotEmpty()) {
+        // Перепланируем следующий цикл, если это реальный периодический будильник (не ручной тест и не перезапуск Watchdog)
+        if (!isSunrise && !isCurrentSessionTestRun && !isContinuingAfterKill && alarm.id != 999L && alarm.daysOfWeek.isNotEmpty()) {
             scheduler.scheduleAlarm(alarm)
         }
 
         val missions = buildMissionList(alarm)
-        val coordinator = MissionChainCoordinator(missions)
-        val initialProgress = if (!isCurrentSessionTestRun &&
-            savedSettings.activeAlarmId == alarm.id &&
-            savedSettings.activeMissionIndex > 0
-        ) {
+        val coordinator = MissionChainCoordinator(
+            missions = missions,
+            fallbackMathDifficulty = alarm.mathDifficultyEnum
+        )
+        val initialProgress = if (isContinuingAfterKill && savedSettings.activeMissionIndex > 0) {
             coordinator.setMissionIndex(savedSettings.activeMissionIndex)
         } else {
             coordinator.startCurrent()
@@ -265,27 +311,32 @@ class AlarmService : Service() {
         missionCoordinator = coordinator
 
         val initialSnap = escalationEngine.evaluateTick()
-        if (!isCurrentSessionTestRun) {
+        if (!isSunrise) {
             settingsRepository.persistActiveAlarmSession(
                 alarmId = alarm.id,
                 state = initialSnap.state,
                 escalationStage = initialSnap.stage,
                 missionIndex = coordinator.currentMissionIndex(),
-                sessionStartEpochMs = System.currentTimeMillis()
+                sessionStartEpochMs = activeSessionStartMs,
+                isTestRun = isCurrentSessionTestRun
             )
-        } else {
-            settingsRepository.clearActiveAlarmSession()
+            // Взводим сторожевой таймер (Watchdog) в AlarmManager для автозапуска при «Закрыть все приложения»
+            scheduler.scheduleWatchdogRevive(alarm.id, isCurrentSessionTestRun, delayMs = 4_000L)
         }
 
         repository.logEvent(
             alarmId = alarm.id,
             alarmLabel = alarm.label,
-            eventType = if (isSunrise) "SUNRISE_STARTED" else "ALARM_RINGING_T0",
+            eventType = when {
+                isSunrise -> "SUNRISE_STARTED"
+                isContinuingAfterKill -> "ALARM_WATCHDOG_REVIVED"
+                else -> "ALARM_RINGING_T0"
+            },
             state = initialSnap.state,
-            details = if (isSunrise) {
-                "Запущена фаза «Рассвет» (T−15 мин)"
-            } else {
-                "Сигнал T0 запущен (Профиль: ${alarm.profileEnum.name}, миссии: ${alarm.missionChainCsv})"
+            details = when {
+                isSunrise -> "Запущена фаза «Рассвет» (T−15 мин)"
+                isContinuingAfterKill -> "Автозапуск будильника после выгрузки из памяти (стадия ${initialSnap.stage})"
+                else -> "Сигнал T0 запущен (Профиль: ${alarm.profileEnum.name}, миссии: ${alarm.missionChainCsv})"
             }
         )
 
@@ -336,6 +387,7 @@ class AlarmService : Service() {
         tickerJob?.cancel()
         var lastLoggedStage = 1
         var cutoffLogged = false
+        var watchdogTick = 0
         val safetyAuditor = com.example.permissions.SafetyAndPowerAuditor(applicationContext)
         tickerJob = serviceScope.launch {
             while (isActive) {
@@ -343,6 +395,9 @@ class AlarmService : Service() {
                 val snap = escalationEngine.evaluateTick(lowBatteryEcoMode = isLowBattery)
 
                 if (snap.batterySafetyCutoffReached) {
+                    isSessionActive = false
+                    scheduler.cancelWatchdogRevive()
+                    settingsRepository.clearActiveAlarmSession()
                     audioController.stopAll()
                     releaseWakeLock()
                     if (!cutoffLogged) {
@@ -355,21 +410,30 @@ class AlarmService : Service() {
                             details = snap.statusDescriptionRu
                         )
                     }
-                } else if (isVoiceListeningMuted) {
-                    // Временно приглушаем динамик и вибро, пока активен микрофон распознавания речи
-                    audioController.stopAll()
                 } else {
-                    val settingsSnap = settingsRepository.getSnapshot()
-                    val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
-                    audioController.startOrUpdate(
-                        stage = snap.stage,
-                        volumePercent = snap.volumePercent,
-                        dualTone = snap.dualToneActive,
-                        vibrationCadenceLevel = snap.vibrationCadenceLevel,
-                        signalMode = alarm.signalModeEnum,
-                        soundSource = alarm.soundSourceEnum,
-                        customRingtoneUri = effectiveUri
-                    )
+                    if (isSessionActive && snap.state != AlarmState.PRE_ALARM_SUNRISE && watchdogTick % 3 == 0) {
+                        // Каждые 3 секунды продлеваем сторожевой таймер в AlarmManager,
+                        // чтобы при закрытии приложения через «Закрыть все» оно перезапустилось через ~3–4 сек
+                        scheduler.scheduleWatchdogRevive(alarm.id, isCurrentSessionTestRun, delayMs = 4_500L)
+                    }
+                    watchdogTick++
+
+                    if (isVoiceListeningMuted) {
+                        // Временно приглушаем динамик и вибро, пока активен микрофон распознавания речи
+                        audioController.stopAll()
+                    } else {
+                        val settingsSnap = settingsRepository.getSnapshot()
+                        val effectiveUri = alarm.customRingtoneUri.ifBlank { settingsSnap.customRingtoneUri }
+                        audioController.startOrUpdate(
+                            stage = snap.stage,
+                            volumePercent = snap.volumePercent,
+                            dualTone = snap.dualToneActive,
+                            vibrationCadenceLevel = snap.vibrationCadenceLevel,
+                            signalMode = alarm.signalModeEnum,
+                            soundSource = alarm.soundSourceEnum,
+                            customRingtoneUri = effectiveUri
+                        )
+                    }
                 }
 
                 if (snap.stage > lastLoggedStage && snap.stage in 2..4) {
@@ -381,13 +445,14 @@ class AlarmService : Service() {
                         state = snap.state,
                         details = snap.statusDescriptionRu
                     )
-                    if (!isCurrentSessionTestRun) {
+                    if (isSessionActive && snap.state != AlarmState.PRE_ALARM_SUNRISE) {
                         settingsRepository.persistActiveAlarmSession(
                             alarmId = alarm.id,
                             state = snap.state,
                             escalationStage = snap.stage,
                             missionIndex = missionCoordinator?.currentMissionIndex() ?: 0,
-                            sessionStartEpochMs = System.currentTimeMillis()
+                            sessionStartEpochMs = activeSessionStartMs,
+                            isTestRun = isCurrentSessionTestRun
                         )
                     }
                 }
@@ -487,6 +552,16 @@ class AlarmService : Service() {
                     missionProgressStep = result.currentStep,
                     missionTotalSteps = result.totalSteps
                 )
+                serviceScope.launch {
+                    settingsRepository.persistActiveAlarmSession(
+                        alarmId = alarm.id,
+                        state = snap.state,
+                        escalationStage = snap.stage,
+                        missionIndex = coordinator.currentMissionIndex(),
+                        sessionStartEpochMs = activeSessionStartMs,
+                        isTestRun = isCurrentSessionTestRun
+                    )
+                }
             }
             is MissionResult.Failed -> {
                 _activeUiState.value = current.copy(
@@ -656,7 +731,10 @@ class AlarmService : Service() {
     }
 
     private fun stopCurrentSession(reason: String, finalState: AlarmState) {
+        isSessionActive = false
+        activeAlarmIdInMemory = -1L
         isVoiceListeningMuted = false
+        scheduler.cancelWatchdogRevive()
         tickerJob?.cancel()
         antiReturnCountdownJob?.cancel()
         audioController.stopAll()
@@ -801,13 +879,46 @@ class AlarmService : Service() {
         wakeLock = null
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Если пользователь смахнул приложение или нажал «Закрыть все приложения» во время звонка:
+        // взводим немедленный перезапуск через AlarmManager.setAlarmClock (1.5 сек) и возвращаем экран тревоги!
+        if (isSessionActive && activeAlarmIdInMemory > 0L) {
+            runCatching {
+                scheduler.scheduleWatchdogRevive(
+                    alarmId = activeAlarmIdInMemory,
+                    isTestRun = isCurrentSessionTestRun,
+                    delayMs = 1_500L
+                )
+                _activeUiState.value.alarm?.let { activeAlarm ->
+                    startForegroundWithFullScreenNotification(activeAlarm, isSunrise = false)
+                }
+                launchFullScreenActivity(activeAlarmIdInMemory)
+            }
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        val shouldRevive = isSessionActive && activeAlarmIdInMemory > 0L
+        val reviveAlarmId = activeAlarmIdInMemory
+        val reviveTestFlag = isCurrentSessionTestRun
+
         instance = null
         tickerJob?.cancel()
         antiReturnCountdownJob?.cancel()
         audioController.stopAll()
         releaseWakeLock()
         serviceScope.cancel()
+
+        if (shouldRevive) {
+            runCatching {
+                scheduler.scheduleWatchdogRevive(
+                    alarmId = reviveAlarmId,
+                    isTestRun = reviveTestFlag,
+                    delayMs = 1_500L
+                )
+            }
+        }
         super.onDestroy()
     }
 
