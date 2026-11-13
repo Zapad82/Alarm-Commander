@@ -8,12 +8,15 @@ import android.net.Uri
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
+import java.net.InetAddress
 import java.net.URI
+import java.net.UnknownHostException
+import java.net.UnknownServiceException
 import java.util.concurrent.TimeUnit
 
 data class BackupPayload(
@@ -40,10 +43,36 @@ data class WebhookValidationResult(
 /**
  * Валидатор сетевой безопасности Webhook:
  * - Разрешает HTTPS для любых внешних и локальных узлов.
- * - Разрешает открытый HTTP исключительно для локальных адресов умного дома (RFC-1918: 192.168.x.x, 10.x.x.x, 172.16-31.x.x, localhost, .local),
- *   блокируя передачу данных в открытом виде через публичный интернет.
+ * - Для открытого HTTP строго синхронизирован с res/xml/network_security_config.xml:
+ *   разрешает только локальные mDNS-имена (*.local, *.lan, *.home, *.internal, localhost)
+ *   и явно перечисленные в network_security_config.xml локальные IP-адреса.
  */
 object WebhookSecurityValidator {
+
+    /**
+     * Точный белый список IPv4-адресов, разрешённых для открытого HTTP в res/xml/network_security_config.xml.
+     * Так как Android network-security-config не поддерживает CIDR-маски, валидатор и XML-конфиг
+     * используют единый согласованный список. Для любых других IP требуется HTTPS или mDNS-имя (*.local / *.lan).
+     */
+    val CLEARTEXT_ALLOWED_LAN_IPS: Set<String> = setOf(
+        "127.0.0.1",
+        "192.168.0.1",
+        "192.168.0.10",
+        "192.168.0.50",
+        "192.168.0.100",
+        "192.168.1.1",
+        "192.168.1.10",
+        "192.168.1.50",
+        "192.168.1.100",
+        "192.168.1.200",
+        "10.0.0.1",
+        "10.0.0.10",
+        "10.0.0.100"
+    )
+
+    private val STRICT_IPV4_REGEX = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
+    private val LOCAL_MDNS_HOSTNAME_REGEX =
+        Regex("""^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(local|lan|home|internal)$""")
 
     fun validateWebhookUrl(rawUrl: String): WebhookValidationResult {
         val trimmed = rawUrl.trim()
@@ -62,13 +91,22 @@ object WebhookSecurityValidator {
             when (scheme) {
                 "https" -> WebhookValidationResult(true, "Защищённый канал HTTPS ($host)")
                 "http" -> {
-                    if (isPrivateLanHost(host)) {
-                        WebhookValidationResult(true, "Локальная сеть умного дома ($host)")
-                    } else {
-                        WebhookValidationResult(
-                            false,
-                            "Заблокирован незашифрованный HTTP во внешнюю сеть ($host). Используйте HTTPS или локальный IP."
-                        )
+                    when {
+                        isCleartextPermittedByNetworkConfig(host) -> {
+                            WebhookValidationResult(true, "Локальный узел умного дома ($host)")
+                        }
+                        isRfc1918PrivateIpv4(host) -> {
+                            WebhookValidationResult(
+                                false,
+                                "Адрес $host не входит в белый список Cleartext-IP Android. Используйте HTTPS, mDNS-имя (например, http://homeassistant.local:8123) или IP из списка (${CLEARTEXT_ALLOWED_LAN_IPS.joinToString(", ")})."
+                            )
+                        }
+                        else -> {
+                            WebhookValidationResult(
+                                false,
+                                "Заблокирован незашифрованный HTTP во внешнюю сеть ($host). Используйте HTTPS или локальный домен *.local."
+                            )
+                        }
                     }
                 }
                 else -> WebhookValidationResult(false, "Неподдерживаемый протокол: $scheme")
@@ -78,37 +116,46 @@ object WebhookSecurityValidator {
         }
     }
 
-    private val STRICT_IPV4_REGEX = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
-    private val LOCAL_MDNS_HOSTNAME_REGEX =
-        Regex("""^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(local|lan|home|internal)$""")
-
     /**
-     * Строгая проверка принадлежности хоста к локальной приватной сети RFC-1918 или mDNS.
-     * Защищает от обхода вида http://192.168.1.100.evil.com/ или http://10.0.0.1.attacker.net/.
+     * Проверяет, разрешён ли хост для открытого HTTP в соответствии с network_security_config.xml.
      */
-    fun isPrivateLanHost(host: String): Boolean {
+    fun isCleartextPermittedByNetworkConfig(host: String): Boolean {
         val h = host.lowercase().trim().removePrefix("[").removeSuffix("]")
         if (h.isEmpty()) return false
-        if (h == "localhost" || h == "::1") return true
-
-        // 1. Проверяем точное совпадение с IPv4-адресом из 4 октетов (без доменных суффиксов)
-        val ipMatch = STRICT_IPV4_REGEX.matchEntire(h)
-        if (ipMatch != null) {
-            val octets = ipMatch.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
-            if (octets.any { it !in 0..255 }) return false
-            val a = octets[0]
-            val b = octets[1]
-            return when {
-                a == 127 -> true // 127.0.0.0/8 (loopback)
-                a == 10 -> true // 10.0.0.0/8 (RFC-1918 Class A private)
-                a == 192 && b == 168 -> true // 192.168.0.0/16 (RFC-1918 Class C private)
-                a == 172 && b in 16..31 -> true // 172.16.0.0/12 (RFC-1918 Class B private)
-                else -> false
-            }
-        }
-
-        // 2. Если это не чистый IPv4, разрешаем только локальные mDNS/LAN-имена (.local, .lan, .home, .internal)
+        if (h == "localhost") return true
+        if (h in CLEARTEXT_ALLOWED_LAN_IPS) return true
+        if (STRICT_IPV4_REGEX.matches(h)) return false
         return LOCAL_MDNS_HOSTNAME_REGEX.matches(h)
+    }
+
+    /**
+     * Проверяет, является ли строка валидным приватным IPv4-адресом RFC-1918 (10/8, 172.16/12, 192.168/16, 127/8).
+     */
+    fun isRfc1918PrivateIpv4(host: String): Boolean {
+        val h = host.lowercase().trim().removePrefix("[").removeSuffix("]")
+        val ipMatch = STRICT_IPV4_REGEX.matchEntire(h) ?: return false
+        val octets = ipMatch.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
+        if (octets.any { it !in 0..255 }) return false
+        val a = octets[0]
+        val b = octets[1]
+        return when {
+            a == 127 -> true
+            a == 10 -> true
+            a == 192 && b == 168 -> true
+            a == 172 && b in 16..31 -> true
+            else -> false
+        }
+    }
+
+    fun isPrivateLanHost(host: String): Boolean = isCleartextPermittedByNetworkConfig(host)
+
+    /**
+     * Проверяет, что скомпилированный InetAddress является строго локальным (защита от DNS-ребайндинга для *.local).
+     */
+    fun isPrivateOrLoopbackInetAddress(address: InetAddress): Boolean {
+        return address.isLoopbackAddress ||
+            address.isSiteLocalAddress ||
+            address.isLinkLocalAddress
     }
 
     /**
@@ -152,7 +199,8 @@ interface BackupChannel {
 
 /**
  * 1. Безопасный и энергоэффективный HTTP-клиент для Webhook умного дома.
- * Использует единый пул соединений OkHttpClient (Singleton) и проверяет URL через WebhookSecurityValidator.
+ * Использует единый пул соединений OkHttpClient (Singleton), проверяет URL через WebhookSecurityValidator
+ * и защищает mDNS-домены (*.local / *.lan) от DNS-ребайндинга в публичные IP.
  */
 class SmartHomeWebhookChannel : BackupChannel {
 
@@ -160,9 +208,38 @@ class SmartHomeWebhookChannel : BackupChannel {
     override val displayNameRu: String = "Webhook умного дома (Свет / Сценарий)"
 
     companion object {
-        // Единый экземпляр OkHttpClient с отключёнными редиректами (защита от 302-перенаправления во внешнюю сеть или с HTTPS на HTTP)
+        /**
+         * DNS-резолвер с защитой от DNS Rebinding: если хост заканчивается на .local / .lan / .home / .internal,
+         * разрешает подключение только если все скомпилированные IP-адреса являются приватными/локальными.
+         */
+        private val safeWebhookDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                val resolved = Dns.SYSTEM.lookup(hostname)
+                val lower = hostname.lowercase().trim()
+                val isLocalDomain = lower == "localhost" ||
+                    lower.endsWith(".local") ||
+                    lower.endsWith(".lan") ||
+                    lower.endsWith(".home") ||
+                    lower.endsWith(".internal")
+                if (isLocalDomain) {
+                    val safeAddresses = resolved.filter {
+                        WebhookSecurityValidator.isPrivateOrLoopbackInetAddress(it)
+                    }
+                    if (safeAddresses.isEmpty()) {
+                        throw UnknownHostException(
+                            "DNS Rebinding blocked: local hostname $hostname resolved to non-private IP"
+                        )
+                    }
+                    return safeAddresses
+                }
+                return resolved
+            }
+        }
+
+        // Единый экземпляр OkHttpClient с отключёнными редиректами и защитой от DNS-ребайндинга
         private val sharedHttpClient: OkHttpClient by lazy {
             OkHttpClient.Builder()
+                .dns(safeWebhookDns)
                 .connectTimeout(3, TimeUnit.SECONDS)
                 .writeTimeout(3, TimeUnit.SECONDS)
                 .readTimeout(3, TimeUnit.SECONDS)
@@ -230,12 +307,27 @@ class SmartHomeWebhookChannel : BackupChannel {
                     )
                 }
             }
-        } catch (e: Exception) {
+        } catch (cleartextEx: UnknownServiceException) {
             BackupResult(
                 channelName = displayNameRu,
                 success = false,
-                messageRu = "Локальный узел $url недоступен (${e.javaClass.simpleName}): запрос зафиксирован в журнале"
+                messageRu = "Открытый HTTP к $url заблокирован network_security_config: используйте HTTPS, домен *.local (http://homeassistant.local:8123) или разрешённый локальный IP."
             )
+        } catch (e: Exception) {
+            val msg = e.message.orEmpty()
+            if (msg.contains("CLEARTEXT", ignoreCase = true)) {
+                BackupResult(
+                    channelName = displayNameRu,
+                    success = false,
+                    messageRu = "Открытый HTTP к $url заблокирован network_security_config: используйте HTTPS, домен *.local (http://homeassistant.local:8123) или разрешённый локальный IP."
+                )
+            } else {
+                BackupResult(
+                    channelName = displayNameRu,
+                    success = false,
+                    messageRu = "Локальный узел $url недоступен (${e.javaClass.simpleName}): запрос зафиксирован в журнале"
+                )
+            }
         }
     }
 }

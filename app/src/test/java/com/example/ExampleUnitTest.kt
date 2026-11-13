@@ -95,10 +95,27 @@ class ExampleUnitTest {
             WebhookSecurityValidator.validateWebhookUrl("https://hooks.nabu.casa/api/webhook/123").isAllowed
         )
         assertTrue(
+            "HTTPS должен разрешаться для любого локального IP (например 192.168.1.55)",
+            WebhookSecurityValidator.validateWebhookUrl("https://192.168.1.55:8123/api/webhook/alarm").isAllowed
+        )
+        assertTrue(
             WebhookSecurityValidator.validateWebhookUrl("http://192.168.1.100:8123/api/webhook/alarm").isAllowed
         )
         assertTrue(
             WebhookSecurityValidator.validateWebhookUrl("http://homeassistant.local:8123/api/webhook/alarm").isAllowed
+        )
+        val unlistedLanCheck = WebhookSecurityValidator.validateWebhookUrl("http://192.168.1.55:8123/api/webhook/alarm")
+        assertFalse(
+            "Приватный IP, не входящий в белый список network_security_config.xml по HTTP, должен отклоняться валидатором с понятной подсказкой",
+            unlistedLanCheck.isAllowed
+        )
+        assertTrue(
+            "Сообщение должно объяснять про HTTPS или .local",
+            unlistedLanCheck.reasonRu.contains("HTTPS") && unlistedLanCheck.reasonRu.contains(".local")
+        )
+        assertFalse(
+            "172.16.x.x по открытому HTTP не входит в network_security_config.xml и должен отклоняться с подсказкой",
+            WebhookSecurityValidator.validateWebhookUrl("http://172.16.0.9:8123/api/webhook/alarm").isAllowed
         )
         assertFalse(
             "Открытый HTTP во внешнюю сеть должен блокироваться",
@@ -119,6 +136,23 @@ class ExampleUnitTest {
         assertFalse(
             "Некорректный IPv4 с октетом > 255 должен блокироваться",
             WebhookSecurityValidator.validateWebhookUrl("http://192.168.999.1/api/webhook").isAllowed
+        )
+        // Проверка защиты от DNS-ребайндинга для .local/.lan
+        assertTrue(
+            WebhookSecurityValidator.isPrivateOrLoopbackInetAddress(
+                java.net.InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 55))
+            )
+        )
+        assertTrue(
+            WebhookSecurityValidator.isPrivateOrLoopbackInetAddress(
+                java.net.InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
+            )
+        )
+        assertFalse(
+            "Публичный IP 8.8.8.8 должен блокироваться при проверке DNS-ребайндинга .local",
+            WebhookSecurityValidator.isPrivateOrLoopbackInetAddress(
+                java.net.InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8))
+            )
         )
         assertEquals(
             "my-secret-token-123",

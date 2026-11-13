@@ -1228,6 +1228,16 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (s.isEnglish) {
+                            "Recommended: https://... or http://homeassistant.local:8123 (*.local / *.lan). Cleartext HTTP by raw IP is restricted by Android Network Security Config to: 192.168.0.1/.10/.50/.100, 192.168.1.1/.10/.50/.100/.200, 10.0.0.1/.10/.100."
+                        } else {
+                            "Рекомендуется: https://... или http://homeassistant.local:8123 (*.local / *.lan). Открытый HTTP по IP разрешён в network_security_config только для: 192.168.0.1/.10/.50/.100, 192.168.1.1/.10/.50/.100/.200, 10.0.0.1/.10/.100."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = sunriseUrl,

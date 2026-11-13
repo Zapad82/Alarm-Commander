@@ -1,6 +1,9 @@
 package com.example.settings
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -13,8 +16,74 @@ import com.example.data.AlarmState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "alarm_commander_settings")
+
+/**
+ * Шифрование и расшифровка Bearer-токена Webhook через аппаратный Android Keystore (AES/GCM/NoPadding)
+ * перед записью в DataStore.
+ */
+object WebhookTokenCrypto {
+    private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+    private const val KEY_ALIAS = "alarm_commander_webhook_token_aes_key"
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+    private const val GCM_TAG_BITS = 128
+    private const val ENCRYPTED_PREFIX = "ENCv1:"
+
+    private fun getOrCreateSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+        val existing = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+        if (existing != null) return existing.secretKey
+
+        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
+        val spec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build()
+        keyGenerator.init(spec)
+        return keyGenerator.generateKey()
+    }
+
+    fun encryptForStorage(plainToken: String): String {
+        val trimmed = plainToken.trim()
+        if (trimmed.isEmpty()) return ""
+        if (trimmed.startsWith(ENCRYPTED_PREFIX)) return trimmed
+        return runCatching {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
+            val iv = cipher.iv
+            val cipherBytes = cipher.doFinal(trimmed.toByteArray(Charsets.UTF_8))
+            val ivBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+            val cipherBase64 = Base64.encodeToString(cipherBytes, Base64.NO_WRAP)
+            "$ENCRYPTED_PREFIX$ivBase64:$cipherBase64"
+        }.getOrDefault(trimmed)
+    }
+
+    fun decryptFromStorage(storedValue: String?): String {
+        val raw = storedValue?.trim().orEmpty()
+        if (raw.isEmpty()) return ""
+        if (!raw.startsWith(ENCRYPTED_PREFIX)) return raw
+        return runCatching {
+            val payload = raw.removePrefix(ENCRYPTED_PREFIX)
+            val parts = payload.split(":", limit = 2)
+            if (parts.size != 2) return ""
+            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+            val cipherBytes = Base64.decode(parts[1], Base64.NO_WRAP)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
+            String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
+        }.getOrDefault("")
+    }
+}
 
 /**
  * Снимок настроек и сохранённого состояния активной тревоги (переживает process death).
@@ -93,7 +162,7 @@ class SettingsRepository(private val context: Context) {
                 ?: "http://192.168.1.100:8123/api/webhook/alarm_sunrise",
             escalationWebhookUrl = prefs[Keys.ESCALATION_WEBHOOK_URL]
                 ?: "http://192.168.1.100:8123/api/webhook/alarm_overdue",
-            webhookAuthToken = prefs[Keys.WEBHOOK_AUTH_TOKEN] ?: "",
+            webhookAuthToken = WebhookTokenCrypto.decryptFromStorage(prefs[Keys.WEBHOOK_AUTH_TOKEN]),
             backupContactName = sanitizedSavedName,
             backupContactPhone = sanitizedSavedPhone,
             bypassDndPreferred = prefs[Keys.BYPASS_DND_PREFERRED] ?: true,
@@ -160,10 +229,11 @@ class SettingsRepository(private val context: Context) {
         defaultNfcTagId: String,
         webhookAuthToken: String = ""
     ) {
+        val encryptedToken = WebhookTokenCrypto.encryptForStorage(webhookAuthToken)
         context.dataStore.edit { prefs ->
             prefs[Keys.SUNRISE_WEBHOOK_URL] = sunriseWebhookUrl.trim()
             prefs[Keys.ESCALATION_WEBHOOK_URL] = escalationWebhookUrl.trim()
-            prefs[Keys.WEBHOOK_AUTH_TOKEN] = webhookAuthToken.trim()
+            prefs[Keys.WEBHOOK_AUTH_TOKEN] = encryptedToken
             prefs[Keys.BACKUP_CONTACT_NAME] = contactName.trim()
             prefs[Keys.BACKUP_CONTACT_PHONE] = contactPhone.trim()
             prefs[Keys.DEFAULT_QR_PAYLOAD] = defaultQrPayload.trim().ifEmpty { "ALARM-COMMANDER-BATHROOM-01" }
