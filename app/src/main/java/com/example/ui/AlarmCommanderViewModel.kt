@@ -297,7 +297,8 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
         contactName: String,
         contactPhone: String,
         defaultQrPayload: String,
-        defaultNfcTagId: String
+        defaultNfcTagId: String,
+        webhookAuthToken: String = ""
     ) {
         viewModelScope.launch {
             settingsRepository.updateBackupSettings(
@@ -306,20 +307,23 @@ class AlarmCommanderViewModel(application: Application) : AndroidViewModel(appli
                 contactName = contactName,
                 contactPhone = contactPhone,
                 defaultQrPayload = defaultQrPayload,
-                defaultNfcTagId = defaultNfcTagId
+                defaultNfcTagId = defaultNfcTagId,
+                webhookAuthToken = webhookAuthToken
             )
             _statusBannerMessage.value = "Настройки сохранены / Settings saved"
         }
     }
 
-    fun testSmartHomeWebhook(url: String, eventType: String) {
+    fun testSmartHomeWebhook(url: String, eventType: String, authToken: String = "") {
         viewModelScope.launch {
+            val effectiveToken = authToken.ifBlank { settingsRepository.getSnapshot().webhookAuthToken }
             val result = SmartHomeWebhookChannel().trigger(
                 BackupPayload(
                     alarmId = 0L,
                     alarmLabel = "Webhook Test",
                     eventType = eventType,
-                    targetUrlOrAddress = url
+                    targetUrlOrAddress = url,
+                    authBearerToken = effectiveToken
                 )
             )
             repository.logEvent(

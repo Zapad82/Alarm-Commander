@@ -104,6 +104,26 @@ class ExampleUnitTest {
             "Открытый HTTP во внешнюю сеть должен блокироваться",
             WebhookSecurityValidator.validateWebhookUrl("http://example.com/api/webhook").isAllowed
         )
+        assertFalse(
+            "Обход префикса 192.168.* через внешний домен должен блокироваться",
+            WebhookSecurityValidator.validateWebhookUrl("http://192.168.1.100.evil.com/api/webhook").isAllowed
+        )
+        assertFalse(
+            "Обход префикса 10.* через внешний домен должен блокироваться",
+            WebhookSecurityValidator.validateWebhookUrl("http://10.0.0.1.attacker.net/api/webhook").isAllowed
+        )
+        assertFalse(
+            "Обход префикса 172.16.* через внешний домен должен блокироваться",
+            WebhookSecurityValidator.validateWebhookUrl("http://172.16.0.1.evil.org/api/webhook").isAllowed
+        )
+        assertFalse(
+            "Некорректный IPv4 с октетом > 255 должен блокироваться",
+            WebhookSecurityValidator.validateWebhookUrl("http://192.168.999.1/api/webhook").isAllowed
+        )
+        assertEquals(
+            "my-secret-token-123",
+            com.example.backup.SmartHomeWebhookChannel.normalizeBearerToken("  Bearer my-secret-token-123 \r\n ")
+        )
 
         val payload = BackupPayload(
             alarmId = 5L,
@@ -288,6 +308,18 @@ class ExampleUnitTest {
         assertEquals(
             "https://github.com/Zapad82/Alarm-Commander/releases",
             com.example.settings.GitHubUpdateChecker.extractReleaseHtmlUrl("""{"author":{"html_url":"https://github.com/Zapad82"}}""")
+        )
+        assertEquals(
+            "https://github.com/Zapad82/Alarm-Commander/releases/download/v1.0.8/app-release.apk",
+            com.example.settings.GitHubUpdateChecker.extractApkDownloadUrl(
+                """{"browser_download_url":"https://github.com/Zapad82/Alarm-Commander/releases/download/v1.0.8/app-release.apk"}"""
+            )
+        )
+        assertEquals(
+            "",
+            com.example.settings.GitHubUpdateChecker.extractApkDownloadUrl(
+                """{"browser_download_url":"http://evil.example.com/Alarm-Commander.apk"}"""
+            )
         )
 
         assertTrue(com.example.ui.AppLanguageMode.EN.resolveIsEnglish(java.util.Locale.forLanguageTag("ru")))

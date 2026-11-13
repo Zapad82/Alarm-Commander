@@ -23,8 +23,9 @@ data class CommanderSettingsState(
     val disclaimerAccepted: Boolean = false,
     val sunriseWebhookUrl: String = "http://192.168.1.100:8123/api/webhook/alarm_sunrise",
     val escalationWebhookUrl: String = "http://192.168.1.100:8123/api/webhook/alarm_overdue",
-    val backupContactName: String = "Дежурный контакт",
-    val backupContactPhone: String = "+79001234567",
+    val webhookAuthToken: String = "",
+    val backupContactName: String = "",
+    val backupContactPhone: String = "",
     val bypassDndPreferred: Boolean = true,
     val defaultQrPayload: String = "ALARM-COMMANDER-BATHROOM-01",
     val defaultNfcTagId: String = "*",
@@ -54,6 +55,7 @@ class SettingsRepository(private val context: Context) {
         val DISCLAIMER_ACCEPTED = booleanPreferencesKey("disclaimer_accepted")
         val SUNRISE_WEBHOOK_URL = stringPreferencesKey("sunrise_webhook_url")
         val ESCALATION_WEBHOOK_URL = stringPreferencesKey("escalation_webhook_url")
+        val WEBHOOK_AUTH_TOKEN = stringPreferencesKey("webhook_auth_token")
         val BACKUP_CONTACT_NAME = stringPreferencesKey("backup_contact_name")
         val BACKUP_CONTACT_PHONE = stringPreferencesKey("backup_contact_phone")
         val BYPASS_DND_PREFERRED = booleanPreferencesKey("bypass_dnd_preferred")
@@ -81,14 +83,19 @@ class SettingsRepository(private val context: Context) {
     val settingsFlow: Flow<CommanderSettingsState> = context.dataStore.data.map { prefs ->
         val stateStr = prefs[Keys.ACTIVE_ALARM_STATE] ?: AlarmState.DISMISSED.name
         val parsedState = runCatching { AlarmState.valueOf(stateStr) }.getOrDefault(AlarmState.DISMISSED)
+        val rawSavedPhone = prefs[Keys.BACKUP_CONTACT_PHONE].orEmpty().trim()
+        val sanitizedSavedPhone = if (rawSavedPhone == "+79001234567") "" else rawSavedPhone
+        val rawSavedName = prefs[Keys.BACKUP_CONTACT_NAME].orEmpty().trim()
+        val sanitizedSavedName = if (rawSavedName == "Дежурный контакт" && sanitizedSavedPhone.isEmpty()) "" else rawSavedName
         CommanderSettingsState(
             disclaimerAccepted = prefs[Keys.DISCLAIMER_ACCEPTED] ?: false,
             sunriseWebhookUrl = prefs[Keys.SUNRISE_WEBHOOK_URL]
                 ?: "http://192.168.1.100:8123/api/webhook/alarm_sunrise",
             escalationWebhookUrl = prefs[Keys.ESCALATION_WEBHOOK_URL]
                 ?: "http://192.168.1.100:8123/api/webhook/alarm_overdue",
-            backupContactName = prefs[Keys.BACKUP_CONTACT_NAME] ?: "Дежурный контакт",
-            backupContactPhone = prefs[Keys.BACKUP_CONTACT_PHONE] ?: "+79001234567",
+            webhookAuthToken = prefs[Keys.WEBHOOK_AUTH_TOKEN] ?: "",
+            backupContactName = sanitizedSavedName,
+            backupContactPhone = sanitizedSavedPhone,
             bypassDndPreferred = prefs[Keys.BYPASS_DND_PREFERRED] ?: true,
             defaultQrPayload = prefs[Keys.DEFAULT_QR_PAYLOAD] ?: "ALARM-COMMANDER-BATHROOM-01",
             defaultNfcTagId = prefs[Keys.DEFAULT_NFC_TAG_ID] ?: "*",
@@ -150,11 +157,13 @@ class SettingsRepository(private val context: Context) {
         contactName: String,
         contactPhone: String,
         defaultQrPayload: String,
-        defaultNfcTagId: String
+        defaultNfcTagId: String,
+        webhookAuthToken: String = ""
     ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.SUNRISE_WEBHOOK_URL] = sunriseWebhookUrl.trim()
             prefs[Keys.ESCALATION_WEBHOOK_URL] = escalationWebhookUrl.trim()
+            prefs[Keys.WEBHOOK_AUTH_TOKEN] = webhookAuthToken.trim()
             prefs[Keys.BACKUP_CONTACT_NAME] = contactName.trim()
             prefs[Keys.BACKUP_CONTACT_PHONE] = contactPhone.trim()
             prefs[Keys.DEFAULT_QR_PAYLOAD] = defaultQrPayload.trim().ifEmpty { "ALARM-COMMANDER-BATHROOM-01" }

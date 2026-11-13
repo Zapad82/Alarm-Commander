@@ -42,6 +42,8 @@ object GitHubUpdateChecker {
         OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(false)
             .build()
     }
 
@@ -190,11 +192,11 @@ object GitHubUpdateChecker {
     }
 
     internal fun extractApkDownloadUrl(json: String): String {
-        val apkRegex = Regex(""""browser_download_url"\s*:\s*"(https://github\.com/Zapad82/Alarm-Commander/releases/download/[^"]*\.apk)"""", RegexOption.IGNORE_CASE)
-        return apkRegex.find(json)?.groupValues?.getOrNull(1)
-            ?: Regex(""""browser_download_url"\s*:\s*"([^"]*\.apk)"""", RegexOption.IGNORE_CASE)
-                .find(json)?.groupValues?.getOrNull(1)
-                .orEmpty()
+        val apkRegex = Regex(
+            """"browser_download_url"\s*:\s*"(https://github\.com/Zapad82/Alarm-Commander/releases/download/[^"\s]+\.apk)"""",
+            RegexOption.IGNORE_CASE
+        )
+        return apkRegex.find(json)?.groupValues?.getOrNull(1).orEmpty()
     }
 
     internal fun extractJsonField(json: String, key: String): String {

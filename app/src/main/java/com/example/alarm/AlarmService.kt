@@ -455,7 +455,8 @@ class AlarmService : Service() {
                     alarmId = alarm.id,
                     alarmLabel = alarm.label,
                     eventType = "SUNRISE_T_MINUS_15",
-                    targetUrlOrAddress = savedSettings.sunriseWebhookUrl
+                    targetUrlOrAddress = savedSettings.sunriseWebhookUrl,
+                    authBearerToken = savedSettings.webhookAuthToken
                 )
             )
             backupMsg = res.messageRu
@@ -598,7 +599,8 @@ class AlarmService : Service() {
                     alarmId = alarm.id,
                     alarmLabel = alarm.label,
                     eventType = "OVERDUE_ESCALATION",
-                    targetUrlOrAddress = settings.escalationWebhookUrl
+                    targetUrlOrAddress = settings.escalationWebhookUrl,
+                    authBearerToken = settings.webhookAuthToken
                 )
             )
             messages.add(webRes.messageRu)

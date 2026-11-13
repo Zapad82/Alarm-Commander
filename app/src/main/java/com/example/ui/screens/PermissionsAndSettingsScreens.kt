@@ -513,9 +513,10 @@ fun SettingsScreen(
         contactName: String,
         contactPhone: String,
         qrPayload: String,
-        nfcTagId: String
+        nfcTagId: String,
+        webhookAuthToken: String
     ) -> Unit,
-    onTestWebhook: (url: String, eventType: String) -> Unit,
+    onTestWebhook: (url: String, eventType: String, authToken: String) -> Unit,
     onTestSocialContact: (name: String, phone: String) -> Unit,
     onTestFutureStub: (String) -> Unit
 ) {
@@ -523,6 +524,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     var sunriseUrl by remember(settings.sunriseWebhookUrl) { mutableStateOf(settings.sunriseWebhookUrl) }
     var escalationUrl by remember(settings.escalationWebhookUrl) { mutableStateOf(settings.escalationWebhookUrl) }
+    var webhookAuthToken by remember(settings.webhookAuthToken) { mutableStateOf(settings.webhookAuthToken) }
     var contactName by remember(settings.backupContactName, s.isEnglish) {
         mutableStateOf(settings.backupContactName.localizeRuntimeText(s.isEnglish))
     }
@@ -1236,7 +1238,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedButton(
-                        onClick = { onTestWebhook(sunriseUrl, "SUNRISE_T_MINUS_15") },
+                        onClick = { onTestWebhook(sunriseUrl, "SUNRISE_T_MINUS_15", webhookAuthToken) },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1257,7 +1259,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedButton(
-                        onClick = { onTestWebhook(escalationUrl, "OVERDUE_ESCALATION") },
+                        onClick = { onTestWebhook(escalationUrl, "OVERDUE_ESCALATION", webhookAuthToken) },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1268,11 +1270,42 @@ fun SettingsScreen(
                         Text(s.testOverdueWebhookBtn, textAlign = TextAlign.Center)
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = webhookAuthToken,
+                        onValueChange = { webhookAuthToken = it },
+                        label = {
+                            Text(
+                                if (s.isEnglish) {
+                                    "Optional Webhook Bearer Token (Authorization: Bearer ...)"
+                                } else {
+                                    "Опциональный Bearer-токен авторизации Webhook"
+                                }
+                            )
+                        },
+                        placeholder = {
+                            Text(
+                                if (s.isEnglish) {
+                                    "Leave empty if not required by Home Assistant"
+                                } else {
+                                    "Оставьте пустым, если не требуется"
+                                }
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("webhook_auth_token_input")
+                    )
+
                     Spacer(modifier = Modifier.height(14.dp))
                     OutlinedTextField(
                         value = contactName,
                         onValueChange = { contactName = it },
                         label = { Text(s.contactNameFieldLabel) },
+                        placeholder = {
+                            Text(if (s.isEnglish) "e.g., Trusted Contact" else "Например: Дежурный контакт")
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1281,6 +1314,9 @@ fun SettingsScreen(
                         value = contactPhone,
                         onValueChange = { contactPhone = it },
                         label = { Text(s.contactPhoneFieldLabel) },
+                        placeholder = {
+                            Text(if (s.isEnglish) "Enter real phone, e.g. +1..." else "Укажите номер, например +79...")
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1304,7 +1340,8 @@ fun SettingsScreen(
                                 contactName,
                                 contactPhone,
                                 qrPayload,
-                                nfcTagId
+                                nfcTagId,
+                                webhookAuthToken
                             )
                         },
                         colors = ButtonDefaults.buttonColors(

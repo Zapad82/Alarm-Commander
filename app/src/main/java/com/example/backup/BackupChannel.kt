@@ -22,7 +22,8 @@ data class BackupPayload(
     val eventType: String, // "SUNRISE_T_MINUS_15" or "OVERDUE_ESCALATION"
     val targetUrlOrAddress: String,
     val contactName: String = "",
-    val contactPhone: String = ""
+    val contactPhone: String = "",
+    val authBearerToken: String = ""
 )
 
 data class BackupResult(
@@ -77,21 +78,37 @@ object WebhookSecurityValidator {
         }
     }
 
+    private val STRICT_IPV4_REGEX = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
+    private val LOCAL_MDNS_HOSTNAME_REGEX =
+        Regex("""^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(local|lan|home|internal)$""")
+
+    /**
+     * Строгая проверка принадлежности хоста к локальной приватной сети RFC-1918 или mDNS.
+     * Защищает от обхода вида http://192.168.1.100.evil.com/ или http://10.0.0.1.attacker.net/.
+     */
     fun isPrivateLanHost(host: String): Boolean {
-        val h = host.lowercase().trim()
-        if (h == "localhost" || h == "127.0.0.1" || h.endsWith(".local") || h.endsWith(".lan")) {
-            return true
-        }
-        if (h.startsWith("192.168.") || h.startsWith("10.")) {
-            return true
-        }
-        if (h.startsWith("172.")) {
-            val secondOctet = h.removePrefix("172.").substringBefore('.').toIntOrNull()
-            if (secondOctet != null && secondOctet in 16..31) {
-                return true
+        val h = host.lowercase().trim().removePrefix("[").removeSuffix("]")
+        if (h.isEmpty()) return false
+        if (h == "localhost" || h == "::1") return true
+
+        // 1. Проверяем точное совпадение с IPv4-адресом из 4 октетов (без доменных суффиксов)
+        val ipMatch = STRICT_IPV4_REGEX.matchEntire(h)
+        if (ipMatch != null) {
+            val octets = ipMatch.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
+            if (octets.any { it !in 0..255 }) return false
+            val a = octets[0]
+            val b = octets[1]
+            return when {
+                a == 127 -> true // 127.0.0.0/8 (loopback)
+                a == 10 -> true // 10.0.0.0/8 (RFC-1918 Class A private)
+                a == 192 && b == 168 -> true // 192.168.0.0/16 (RFC-1918 Class C private)
+                a == 172 && b in 16..31 -> true // 172.16.0.0/12 (RFC-1918 Class B private)
+                else -> false
             }
         }
-        return false
+
+        // 2. Если это не чистый IPv4, разрешаем только локальные mDNS/LAN-имена (.local, .lan, .home, .internal)
+        return LOCAL_MDNS_HOSTNAME_REGEX.matches(h)
     }
 
     /**
@@ -143,14 +160,27 @@ class SmartHomeWebhookChannel : BackupChannel {
     override val displayNameRu: String = "Webhook умного дома (Свет / Сценарий)"
 
     companion object {
-        // Единый экземпляр OkHttpClient предотвращает утечку пулов потоков и сокетов
+        // Единый экземпляр OkHttpClient с отключёнными редиректами (защита от 302-перенаправления во внешнюю сеть или с HTTPS на HTTP)
         private val sharedHttpClient: OkHttpClient by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(3, TimeUnit.SECONDS)
                 .writeTimeout(3, TimeUnit.SECONDS)
                 .readTimeout(3, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
                 .retryOnConnectionFailure(false)
                 .build()
+        }
+
+        internal fun normalizeBearerToken(rawToken: String): String {
+            val trimmed = rawToken.trim()
+            if (trimmed.isEmpty()) return ""
+            return trimmed
+                .removePrefix("Bearer ")
+                .removePrefix("bearer ")
+                .trim()
+                .replace("\r", "")
+                .replace("\n", "")
         }
     }
 
@@ -166,12 +196,18 @@ class SmartHomeWebhookChannel : BackupChannel {
         }
 
         val jsonBody = WebhookSecurityValidator.buildSafeJsonBody(payload)
+        val cleanBearer = normalizeBearerToken(payload.authBearerToken)
 
         return@withContext try {
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(url)
                 .post(jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .build()
+
+            if (cleanBearer.isNotEmpty()) {
+                requestBuilder.header("Authorization", "Bearer $cleanBearer")
+            }
+
+            val request = requestBuilder.build()
 
             sharedHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
@@ -179,6 +215,12 @@ class SmartHomeWebhookChannel : BackupChannel {
                         channelName = displayNameRu,
                         success = true,
                         messageRu = "Webhook доставлен (${response.code}) -> $url"
+                    )
+                } else if (response.code in 300..399) {
+                    BackupResult(
+                        channelName = displayNameRu,
+                        success = false,
+                        messageRu = "Редирект HTTP ${response.code} заблокирован политикой безопасности ($url)"
                     )
                 } else {
                     BackupResult(
@@ -212,11 +254,11 @@ class SocialContactChannel(private val context: Context) : BackupChannel {
         val rawPhone = payload.contactPhone.trim()
         val sanitizedPhone = rawPhone.filter { it.isDigit() || it == '+' }
         val name = payload.contactName.ifBlank { "Резервный контакт" }.take(60)
-        if (sanitizedPhone.length < 5) {
+        if (sanitizedPhone.length < 5 || sanitizedPhone == "+79001234567") {
             return BackupResult(
                 channelName = displayNameRu,
                 success = false,
-                messageRu = "Некорректный телефон резервного контакта"
+                messageRu = "Укажите реальный номер телефона резервного контакта в разделе «Опции»"
             )
         }
 

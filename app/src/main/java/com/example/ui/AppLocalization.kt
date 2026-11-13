@@ -705,6 +705,9 @@ fun String.localizeRuntimeText(isEnglish: Boolean): String {
     }
 
     translated = translated
+        .replace("Укажите реальный номер телефона резервного контакта в разделе «Опции»", "Enter a real backup contact phone number in the Config tab")
+        .replace("Редирект HTTP", "HTTP Redirect")
+        .replace("заблокирован политикой безопасности", "blocked by security policy")
         .replace("Не удалось отправить Webhook", "Webhook request failed")
         .replace("Webhook успешно доставлен", "Webhook delivered")
         .replace("Локальная симуляция Webhook", "Local Webhook simulation")
